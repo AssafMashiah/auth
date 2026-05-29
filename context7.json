@@ -1,0 +1,24 @@
+{
+  "projectTitle": "Cloudflare Auth Service",
+  "description": "A standalone deployable authentication service for Cloudflare Workers and D1. Interact via REST API only — do not import as a package.",
+  "folders": [],
+  "excludeFolders": [
+    "admin/src",
+    "admin/node_modules",
+    "admin/dist",
+    "src",
+    "migrations",
+    "node_modules",
+    ".wrangler",
+    ".github"
+  ],
+  "excludeFiles": ["CHANGELOG.md", "package-lock.json"],
+  "rules": [
+    "This is a standalone deployable Worker service, not an npm package. Do not import it. All interactions are REST API fetch calls.",
+    "Every auth endpoint requires a projectId obtained via POST /api/admin/projects.",
+    "Admin endpoints require X-Admin-Session header from POST /api/admin/login.",
+    "Run migrations before first use: npm run db:migrate (remote) or npm run db:migrate:local (dev).",
+    "Change default admin credentials (admin@example.com / Admin123!) immediately after first deployment.",
+    "D1 is eventually consistent — do not expect immediate read-after-write in the same request."
+  ]
+}

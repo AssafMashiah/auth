@@ -1,0 +1,37 @@
+# Development Environment Variables Example
+# Copy this file to .dev.vars and fill in your actual values
+# NEVER commit .dev.vars to version control!
+
+# =============================================================================
+# ADMIN CONFIGURATION
+# =============================================================================
+
+# Admin Session Secret
+# A secure random string used to sign admin session cookies
+# Generate with: openssl rand -base64 32
+ADMIN_SESSION_SECRET=your_admin_session_secret_here
+
+# Encryption Key
+# A 32-byte base64-encoded key used for encrypting sensitive data in the database
+# Generate with: openssl rand -base64 32
+ENCRYPTION_KEY=your_base64_encoded_32_byte_encryption_key_here
+
+# =============================================================================
+# SETUP INSTRUCTIONS
+# =============================================================================
+#
+# 1. Copy this file:
+#    cp .dev.vars.example .dev.vars
+#
+# 2. Generate secure secrets:
+#    ADMIN_SESSION_SECRET: openssl rand -base64 32
+#    ENCRYPTION_KEY: openssl rand -base64 32
+#
+# 3. For production deployment:
+#    - DO NOT use .dev.vars in production
+#    - Set secrets using: wrangler secret put SECRET_NAME
+#    - Update production vars in wrangler.toml [env.production.vars]
+#
+# 4. Test locally:
+#    npm run dev
+#

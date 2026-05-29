@@ -1,0 +1,45 @@
+name = "auth"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = [ "nodejs_compat" ]
+
+# Cloudflare Routes - Configure these for your domain
+# routes = [
+#   { pattern = "auth.example.com/", zone_name = "example.com" },
+#   { pattern = "auth.example.com/*", zone_name = "example.com" }
+# ]
+
+# Serve admin UI static files
+[assets]
+directory = "./admin/dist"
+binding = "ASSETS"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "auth-db"
+database_id = "e3413ce5-42f6-4336-aaba-c8e4bd3fb0dd"
+migrations_dir = "migrations"
+
+# Secrets (set these via wrangler secret put <SECRET_NAME>)
+# These are sensitive values that should NEVER be committed to version control
+#
+# REQUIRED SECRETS:
+# - ADMIN_SESSION_SECRET: Secret key for admin session management
+#   Set with: wrangler secret put ADMIN_SESSION_SECRET
+#
+# - ENCRYPTION_KEY: Key for encrypting sensitive data (32 bytes, base64 encoded)
+#   Set with: wrangler secret put ENCRYPTION_KEY
+#
+# OPTIONAL SECRETS (for Cloudflare Email provider):
+# - CF_ACCOUNT_ID: Cloudflare Account ID — default for the Cloudflare email provider
+#   Set with: wrangler secret put CF_ACCOUNT_ID
+#   (Can be overridden per-provider via the admin dashboard)
+#
+# - CF_API_TOKEN: Cloudflare API Token with email sending permissions
+#   Set with: wrangler secret put CF_API_TOKEN
+#   (Can be overridden per-provider via the admin dashboard)
+#
+
+[observability]
+enabled = true

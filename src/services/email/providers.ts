@@ -1,0 +1,222 @@
+import { EmailProviderType } from '../../types';
+import nodemailer from "nodemailer";
+
+export interface EmailMessage {
+  to: string;
+  from: string;
+  fromName?: string;
+  subject: string;
+  html: string;
+  text?: string;
+}
+
+export interface IEmailProvider {
+  send(message: EmailMessage): Promise<void>;
+}
+
+export class ProviderFactory {
+  static create(type: EmailProviderType, config: any): IEmailProvider {
+    switch (type) {
+      case 'sendgrid':
+        return new SendGridProvider(config);
+      case 'postmark':
+        return new PostmarkProvider(config);
+      case 'mailgun':
+        return new MailgunProvider(config);
+      case 'resend':
+        return new ResendProvider(config);
+      case 'cloudflare':
+        return new CloudflareEmailProvider(config);
+      case 'smtp':
+        return new SmtpProvider(config);
+      default:
+        // Try to map known providers to their specific implementations if possible, otherwise throw
+        throw new Error(`Provider ${type} not supported yet`);
+    }
+  }
+}
+
+export class SendGridProvider implements IEmailProvider {
+  constructor(private config: { apiKey: string }) {}
+
+  async send(message: EmailMessage): Promise<void> {
+    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: message.to }] }],
+        from: { email: message.from, name: message.fromName },
+        subject: message.subject,
+        content: [
+          { type: 'text/html', value: message.html },
+          ...(message.text ? [{ type: 'text/plain', value: message.text }] : [])
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`SendGrid Error: ${error}`);
+    }
+  }
+}
+
+export class PostmarkProvider implements IEmailProvider {
+  constructor(private config: { apiKey: string }) {}
+
+  async send(message: EmailMessage): Promise<void> {
+    const response = await fetch('https://api.postmarkapp.com/email', {
+      method: 'POST',
+      headers: {
+        'X-Postmark-Server-Token': this.config.apiKey,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        From: message.fromName ? `${message.fromName} <${message.from}>` : message.from,
+        To: message.to,
+        Subject: message.subject,
+        HtmlBody: message.html,
+        TextBody: message.text,
+        MessageStream: 'outbound'
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Postmark Error: ${error}`);
+    }
+  }
+}
+
+export class MailgunProvider implements IEmailProvider {
+  constructor(private config: { apiKey: string; domain: string; region?: 'us' | 'eu' }) {}
+
+  async send(message: EmailMessage): Promise<void> {
+    const baseUrl = this.config.region === 'eu'
+      ? 'https://api.eu.mailgun.net/v3'
+      : 'https://api.mailgun.net/v3';
+
+    const formData = new FormData();
+    formData.append('from', message.fromName ? `${message.fromName} <${message.from}>` : message.from);
+    formData.append('to', message.to);
+    formData.append('subject', message.subject);
+    formData.append('html', message.html);
+    if (message.text) formData.append('text', message.text);
+
+    const response = await fetch(`${baseUrl}/${this.config.domain}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + btoa(`api:${this.config.apiKey}`)
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Mailgun Error: ${error}`);
+    }
+  }
+}
+
+export class ResendProvider implements IEmailProvider {
+  constructor(private config: { apiKey: string }) {}
+
+  async send(message: EmailMessage): Promise<void> {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: message.fromName ? `${message.fromName} <${message.from}>` : message.from,
+        to: message.to,
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Resend Error: ${error}`);
+    }
+  }
+}
+
+export class CloudflareEmailProvider implements IEmailProvider {
+  constructor(private config: { accountId?: string; apiToken?: string }) {}
+
+  async send(message: EmailMessage): Promise<void> {
+    if (!this.config.accountId) throw new Error('Cloudflare Email: accountId is required');
+    if (!this.config.apiToken) throw new Error('Cloudflare Email: apiToken is required');
+
+    const url = `https://api.cloudflare.com/client/v4/accounts/${this.config.accountId}/email/sending/send`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.config.apiToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        to: message.to,
+        from: message.fromName ? `${message.fromName} <${message.from}>` : message.from,
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json<any>().catch(() => ({}));
+      throw new Error(`Cloudflare Email Error: ${err?.errors?.[0]?.message ?? response.statusText}`);
+    }
+
+    const body = await response.json<any>();
+    if (!body.success) {
+      throw new Error(`Cloudflare Email Error: ${body.errors?.[0]?.message ?? 'Unknown error'}`);
+    }
+  }
+}
+
+export class SmtpProvider implements IEmailProvider {
+  private transporter: nodemailer.Transporter;
+
+  constructor(
+    private config: {
+      host: string;
+      port: number;
+      username?: string;
+      password?: string;
+      secure?: boolean;
+    },
+  ) {
+    this.transporter = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure ?? config.port === 465,
+      auth: config.username
+        ? {
+            user: config.username,
+            pass: config.password,
+          }
+        : undefined,
+    });
+  }
+
+  async send(message: EmailMessage): Promise<void> {
+    await this.transporter.sendMail({
+      from: message.fromName
+        ? `"${message.fromName}" <${message.from}>`
+        : message.from,
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+    });
+  }
+}
