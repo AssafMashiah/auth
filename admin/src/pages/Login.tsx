@@ -44,8 +44,8 @@ export default function Login({ onLogin }: LoginProps) {
     <div className="min-h-screen flex items-center justify-center bg-page">
       <div className="card max-w-md w-full p-8">
         <div className="text-center mb-8 flex flex-col items-center">
-          <img src="/logo.svg" alt="Auth Service" className="h-24 w-auto mb-6 dark:hidden" />
-          <img src="/logo_dark.svg" alt="Auth Service" className="h-24 w-auto mb-6 hidden dark:block" />
+          <img src="/admin/logo.svg" alt="Auth Service" className="h-24 w-auto mb-6 dark:hidden" />
+          <img src="/admin/logo_dark.svg" alt="Auth Service" className="h-24 w-auto mb-6 hidden dark:block" />
           <h1 className="text-3xl font-bold text-text-primary mb-2">Auth Service Admin</h1>
           <p className="text-text-secondary">Sign in to manage your authentication service</p>
         </div>

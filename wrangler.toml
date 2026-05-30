@@ -1,18 +1,19 @@
 name = "auth"
 main = "src/index.ts"
+account_id = "5eab29f46ec31fb183a82b0861479d5c"
 compatibility_date = "2024-09-23"
 compatibility_flags = [ "nodejs_compat" ]
 
 # Cloudflare Routes - Configure these for your domain
-# routes = [
-#   { pattern = "auth.example.com/", zone_name = "example.com" },
-#   { pattern = "auth.example.com/*", zone_name = "example.com" }
-# ]
+routes = [
+  { pattern = "auth.buildingis.art", zone_name = "buildingis.art", custom_domain = true }
+]
 
 # Serve admin UI static files
 [assets]
 directory = "./admin/dist"
 binding = "ASSETS"
+run_worker_first = true
 
 # D1 Database binding
 [[d1_databases]]

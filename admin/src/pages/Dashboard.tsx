@@ -78,12 +78,12 @@ export default function Dashboard({ onLogout, onThemeChange }: DashboardProps) {
       <aside className="w-64 bg-page border-r border-border text-text-primary flex flex-col">
         <div className="p-6 flex flex-col items-center text-center">
           <img
-            src="/logo.svg"
+            src="/admin/logo.svg"
             alt="Auth Service"
             className="h-16 w-auto rounded-lg dark:hidden"
           />
           <img
-            src="/logo_dark.svg"
+            src="/admin/logo_dark.svg"
             alt="Auth Service"
             className="h-16 w-auto rounded-lg hidden dark:block"
           />
