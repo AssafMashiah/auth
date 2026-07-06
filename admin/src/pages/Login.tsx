@@ -16,6 +16,10 @@ export default function Login({ onLogin }: LoginProps) {
     setError('');
     setLoading(true);
 
+    // Clear any stale setup flag from a previous login so the response
+    // is the single source of truth for this session.
+    localStorage.removeItem("admin_requires_setup");
+
     try {
       const response = await api.login(email, password);
       // Store current user info
@@ -28,8 +32,6 @@ export default function Login({ onLogin }: LoginProps) {
         }
         if (response.data.requiresSetup) {
           localStorage.setItem("admin_requires_setup", "true");
-        } else {
-          localStorage.removeItem("admin_requires_setup");
         }
       }
       onLogin();

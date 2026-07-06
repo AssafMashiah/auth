@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import bcrypt from 'bcryptjs';
 import {
   generateJWTSecret,
   generateSessionToken,
@@ -93,8 +94,27 @@ describe('Crypto Utils', () => {
 
     it('should generate bcrypt hash', async () => {
       const hash = await hashPassword('TestPassword123');
-      
+
       expect(hash.startsWith('$2')).toBe(true);
+    });
+
+    it('should use cost factor 10 to stay under Cloudflare Workers CPU limit', async () => {
+      const hash = await hashPassword('TestPassword123');
+
+      // Cost 10 is encoded in the hash prefix; cost 12 would hit the
+      // ~300ms Workers CPU burst limit. New hashes must stay at 10.
+      // bcryptjs emits the `$2b$` variant.
+      expect(hash.slice(0, 7)).toBe('$2b$10$');
+    });
+
+    it('should still verify hashes created at cost 12 (backward compatibility)', async () => {
+      // An existing hash created at cost 12 must keep verifying after
+      // the cost-factor reduction. bcrypt embeds the cost in the hash,
+      // so verifyPassword works against any cost.
+      const legacyHash = bcrypt.hashSync('TestPassword123', 12);
+
+      expect(legacyHash.slice(0, 7)).toBe('$2b$12$');
+      expect(await verifyPassword('TestPassword123', legacyHash)).toBe(true);
     });
   });
 
