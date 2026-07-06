@@ -22,6 +22,10 @@ database_name = "auth-db"
 database_id = "e3413ce5-42f6-4336-aaba-c8e4bd3fb0dd"
 migrations_dir = "migrations"
 
+# Cloudflare Email Service binding (zero-config, needs domain onboarding)
+[[send_email]]
+name = "EMAIL"
+
 # Secrets (set these via wrangler secret put <SECRET_NAME>)
 # These are sensitive values that should NEVER be committed to version control
 #
