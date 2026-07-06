@@ -226,8 +226,10 @@ export class RateLimitService {
       .get();
 
     if (existing) {
-      // Update existing rule
-      const updated = await db
+      // Update existing rule.
+      // D1 does not reliably support Drizzle's .returning() clause, so we
+      // run the UPDATE and then SELECT the row back by id.
+      await db
         .update(rateLimitRules)
         .set({
           windowSeconds: ruleData.windowSeconds,
@@ -236,14 +238,20 @@ export class RateLimitService {
           blockDurationSeconds: ruleData.blockDurationSeconds || 300,
           enabled: ruleData.enabled !== undefined ? ruleData.enabled : true,
         })
+        .where(eq(rateLimitRules.id, existing.id));
+
+      const updated = await db
+        .select()
+        .from(rateLimitRules)
         .where(eq(rateLimitRules.id, existing.id))
-        .returning()
         .get();
 
       return updated as unknown as RateLimitRule;
     } else {
-      // Create new rule
-      const created = await db
+      // Create new rule.
+      // D1 does not reliably support Drizzle's .returning() clause, so we
+      // run the INSERT and then SELECT the row back by (projectId, ruleType).
+      await db
         .insert(rateLimitRules)
         .values({
           projectId,
@@ -253,8 +261,17 @@ export class RateLimitService {
           action: ruleData.action || 'block',
           blockDurationSeconds: ruleData.blockDurationSeconds || 300,
           enabled: ruleData.enabled !== undefined ? ruleData.enabled : true,
-        })
-        .returning()
+        });
+
+      const created = await db
+        .select()
+        .from(rateLimitRules)
+        .where(
+          and(
+            eq(rateLimitRules.projectId, projectId),
+            eq(rateLimitRules.ruleType, ruleData.ruleType)
+          )
+        )
         .get();
 
       return created as unknown as RateLimitRule;
