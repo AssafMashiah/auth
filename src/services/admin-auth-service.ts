@@ -222,19 +222,28 @@ export class AdminAuthService {
     // Hash password
     const passwordHash = await hashPassword(data.password);
 
-    // Create admin user
+    // Create admin user.
+    // D1 does not reliably support Drizzle's .returning() clause, so we
+    // run the INSERT and then SELECT the row back by email. The INSERT
+    // itself commits; only the RETURNING projection is unsafe.
+    await db.insert(adminUsers).values({
+      email: data.email,
+      passwordHash,
+      displayName: data.displayName,
+      role: data.role || "admin",
+      enabled: true,
+      mfaEnabled: false,
+    });
+
     const created = await db
-      .insert(adminUsers)
-      .values({
-        email: data.email,
-        passwordHash,
-        displayName: data.displayName,
-        role: data.role || "admin",
-        enabled: true,
-        mfaEnabled: false,
-      })
-      .returning()
+      .select()
+      .from(adminUsers)
+      .where(eq(adminUsers.email, data.email))
       .get();
+
+    if (!created) {
+      throw new Error("Failed to create admin user");
+    }
 
     return created as unknown as AdminUser;
   }
@@ -280,11 +289,18 @@ export class AdminAuthService {
       }
     }
 
-    const updated = await db
+    // Update admin user.
+    // D1 does not reliably support Drizzle's .returning() clause, so we
+    // run the UPDATE and then SELECT the row back by id.
+    await db
       .update(adminUsers)
       .set(updates as any)
+      .where(eq(adminUsers.id, adminId));
+
+    const updated = await db
+      .select()
+      .from(adminUsers)
       .where(eq(adminUsers.id, adminId))
-      .returning()
       .get();
 
     if (!updated) {

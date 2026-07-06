@@ -49,8 +49,10 @@ export class OAuthService {
       .get();
 
     if (existing) {
-      // Update existing provider
-      const updated = await db
+      // Update existing provider.
+      // D1 does not reliably support Drizzle's .returning() clause, so we
+      // run the UPDATE and then SELECT the row back by id.
+      await db
         .update(projectOAuthProviders)
         .set({
           enabled: data.enabled !== undefined ? data.enabled : true,
@@ -62,15 +64,21 @@ export class OAuthService {
           scopes: data.scopes ? JSON.stringify(data.scopes) : null,
           additionalConfig: data.additionalConfig ? JSON.stringify(data.additionalConfig) : null,
         })
+        .where(eq(projectOAuthProviders.id, existing.id));
+
+      const updated = await db
+        .select()
+        .from(projectOAuthProviders)
         .where(eq(projectOAuthProviders.id, existing.id))
-        .returning()
         .get();
 
       return updated as unknown as OAuthProvider;
     }
 
-    // Create new provider
-    const created = await db
+    // Create new provider.
+    // D1 does not reliably support Drizzle's .returning() clause, so we run
+    // the INSERT and then SELECT the row back by (projectId, providerName).
+    await db
       .insert(projectOAuthProviders)
       .values({
         projectId: data.projectId,
@@ -83,8 +91,17 @@ export class OAuthService {
         userInfoUrl: data.userInfoUrl || this.getDefaultUserInfoUrl(data.providerName),
         scopes: data.scopes ? JSON.stringify(data.scopes) : JSON.stringify(this.getDefaultScopes(data.providerName)),
         additionalConfig: data.additionalConfig ? JSON.stringify(data.additionalConfig) : null,
-      })
-      .returning()
+      });
+
+    const created = await db
+      .select()
+      .from(projectOAuthProviders)
+      .where(
+        and(
+          eq(projectOAuthProviders.projectId, data.projectId),
+          eq(projectOAuthProviders.providerName, data.providerName)
+        )
+      )
       .get();
 
     return created as unknown as OAuthProvider;
@@ -299,11 +316,18 @@ export class OAuthService {
       data.clientSecret = await encrypt(data.clientSecret, env.ENCRYPTION_KEY);
     }
 
-    const updated = await db
+    // Update OAuth provider.
+    // D1 does not reliably support Drizzle's .returning() clause, so we run
+    // the UPDATE and then SELECT the row back by id.
+    await db
       .update(projectOAuthProviders)
       .set(data as any)
+      .where(eq(projectOAuthProviders.id, providerId));
+
+    const updated = await db
+      .select()
+      .from(projectOAuthProviders)
       .where(eq(projectOAuthProviders.id, providerId))
-      .returning()
       .get();
 
     if (!updated) {
