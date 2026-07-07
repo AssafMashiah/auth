@@ -3,7 +3,7 @@ import type { Env, Variables } from '../types';
 import { jwtService } from '../services/jwt-service';
 import { projectService } from '../services/project-service';
 import { userService } from '../services/user-service';
-import { AuthenticationError } from '../utils/errors';
+import { AuthenticationError, AuthorizationError } from '../utils/errors';
 
 /**
  * JWT Authentication Middleware
@@ -32,10 +32,18 @@ export async function authMiddleware(c: Context<{ Bindings: Env; Variables: Vari
   // Verify token
   const payload = await jwtService.verifyAccessToken(token, project.jwtSecret, project.jwtAlgorithm);
 
-  // Get user
+  // Get user. getUserById filters out status='deleted' (returns null),
+  // so a missing row covers the deleted-user case -> 401 AuthenticationError.
   const user = await userService.getUserById(c.env, project.userTableName, payload.sub);
   if (!user) {
     throw new AuthenticationError('User not found');
+  }
+
+  // Suspended users keep their token but lose access. 403 (not 401)
+  // because the request *was* authenticated; the user's account state
+  // is what's blocking them.
+  if (user.status === 'suspended') {
+    throw new AuthorizationError('Account is suspended');
   }
 
   // Attach user and project to context

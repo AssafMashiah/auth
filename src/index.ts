@@ -20,6 +20,12 @@ import { rateLimitService } from './services/rate-limit-service';
 import { SystemSettingsService } from './services/system-settings-service';
 import { EmailProviderService } from './services/email-provider-service';
 import { EmailTemplateService } from './services/email-template-service';
+import {
+  formatUserListRow,
+  formatUserDetailRow,
+  changeUserStatus,
+  initiateAdminPasswordReset,
+} from './services/admin-user-service';
 
 // Validation
 import {
@@ -386,33 +392,30 @@ app.get('/api/admin/projects/:projectId/users', adminAuthMiddleware, async (c) =
   const projectId = c.req.param('projectId');
   const limit = parseInt(c.req.query('limit') || '10');
   const offset = parseInt(c.req.query('offset') || '0');
-  const search = c.req.query('search');
+  const search = c.req.query('search') || undefined;
+  const status = c.req.query('status') || undefined;
 
   const project = await projectService.getProject(c.env, projectId);
   if (!project) {
     return c.json({ success: false, error: 'Project not found' }, 404 as any);
   }
 
+  // Push search + pagination down to SQL so total reflects the same
+  // filter set as the page (and we don't load the whole table just to
+  // filter in JS).
   const users = await userService.listUsers(c.env, project.userTableName, {
     limit,
     offset,
+    search,
+    status,
   });
+  const total = await userService.countUsers(c.env, project.userTableName, status, search);
 
-  // Filter by search if provided
-  let filteredUsers = users;
-  if (search) {
-    const searchLower = search.toLowerCase();
-    filteredUsers = users.filter(u =>
-      u.email.toLowerCase().includes(searchLower) ||
-      u.displayName?.toLowerCase().includes(searchLower)
-    );
-  }
-
-  const total = await userService.countUsers(c.env, project.userTableName);
+  const rows = users.map(formatUserListRow);
 
   return c.json({
     success: true,
-    data: filteredUsers,
+    data: rows,
     total,
   });
 });
@@ -488,6 +491,93 @@ app.delete('/api/admin/projects/:projectId/users/:userId', adminAuthMiddleware, 
     success: true,
     message: 'User deleted successfully',
   });
+});
+
+// Get a single user (A2)
+app.get('/api/admin/projects/:projectId/users/:userId', adminAuthMiddleware, async (c) => {
+  const projectId = c.req.param('projectId');
+  const userId = c.req.param('userId');
+
+  const project = await projectService.getProject(c.env, projectId);
+  if (!project) {
+    return c.json({ success: false, error: 'Project not found' }, 404 as any);
+  }
+
+  const user = await userService.getUserById(c.env, project.userTableName, userId);
+  if (!user) {
+    return c.json({ success: false, error: 'User not found' }, 404 as any);
+  }
+
+  return c.json({
+    success: true,
+    data: formatUserDetailRow(user),
+  });
+});
+
+// Change user status (A3)
+app.patch('/api/admin/projects/:projectId/users/:userId/status', adminAuthMiddleware, async (c) => {
+  const projectId = c.req.param('projectId');
+  const userId = c.req.param('userId');
+  const body = await c.req.json();
+  const status = body?.status;
+  const reason = typeof body?.reason === 'string' ? body.reason : undefined;
+
+  if (status !== 'active' && status !== 'suspended') {
+    return c.json({ success: false, error: 'status must be "active" or "suspended"' }, 400 as any);
+  }
+
+  const project = await projectService.getProject(c.env, projectId);
+  if (!project) {
+    return c.json({ success: false, error: 'Project not found' }, 404 as any);
+  }
+
+  try {
+    const row = await changeUserStatus(c.env, projectId, project.userTableName, userId, {
+      status,
+      reason,
+    });
+    return c.json({ success: true, data: row });
+  } catch (err: any) {
+    if (err?.statusCode === 404) {
+      return c.json({ success: false, error: 'User not found' }, 404 as any);
+    }
+    if (err?.statusCode === 400) {
+      return c.json({ success: false, error: err.message }, 400 as any);
+    }
+    throw err;
+  }
+});
+
+// Admin-initiated password reset (A4)
+app.post('/api/admin/projects/:projectId/users/:userId/reset-password', adminAuthMiddleware, async (c) => {
+  const projectId = c.req.param('projectId');
+  const userId = c.req.param('userId');
+  const admin = c.get('admin');
+
+  const project = await projectService.getProject(c.env, projectId);
+  if (!project) {
+    return c.json({ success: false, error: 'Project not found' }, 404 as any);
+  }
+
+  try {
+    const result = await initiateAdminPasswordReset(
+      c.env,
+      projectId,
+      project.userTableName,
+      userId,
+      {
+        ipAddress: getIpAddress(c.req.raw),
+        userAgent: getUserAgent(c.req.raw),
+        adminUserId: admin.id,
+      }
+    );
+    return c.json({ success: true, data: result });
+  } catch (err: any) {
+    if (err?.statusCode === 404) {
+      return c.json({ success: false, error: 'User not found' }, 404 as any);
+    }
+    throw err;
+  }
 });
 
 // Resend verification email

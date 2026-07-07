@@ -284,7 +284,11 @@ export class UserService {
   }
 
   /**
-   * List users in project table
+   * List users in project table.
+   *
+   * Pagination and search are applied at the SQL level so `total` (via
+   * countUsers) reflects the same filter set.
+   *
    * @param env - Environment bindings
    * @param tableName - User table name
    * @param filters - Filter options
@@ -295,6 +299,7 @@ export class UserService {
     tableName: string,
     filters?: {
       status?: string;
+      search?: string;
       limit?: number;
       offset?: number;
     }
@@ -311,6 +316,12 @@ export class UserService {
       params.push(filters.status);
     }
 
+    if (filters?.search) {
+      query += ` AND (email LIKE ? OR display_name LIKE ?)`;
+      const term = `%${filters.search}%`;
+      params.push(term, term);
+    }
+
     query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
     params.push(limit, offset);
 
@@ -319,16 +330,22 @@ export class UserService {
   }
 
   /**
-   * Count users in project table
+   * Count users in project table.
+   *
+   * Accepts the same filter set as listUsers so callers can pair them
+   * to produce a total that matches the rendered page.
+   *
    * @param env - Environment bindings
    * @param tableName - User table name
    * @param status - Optional status filter
+   * @param search - Optional search term (matches email OR display_name)
    * @returns User count
    */
   async countUsers(
     env: Env,
     tableName: string,
-    status?: string
+    status?: string,
+    search?: string
   ): Promise<number> {
     const safeName = sanitizeTableName(tableName);
 
@@ -338,6 +355,12 @@ export class UserService {
     if (status) {
       query += ` AND status = ?`;
       params.push(status);
+    }
+
+    if (search) {
+      query += ` AND (email LIKE ? OR display_name LIKE ?)`;
+      const term = `%${search}%`;
+      params.push(term, term);
     }
 
     const result = await env.DB.prepare(query).bind(...params).first();

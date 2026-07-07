@@ -5,7 +5,7 @@ import { jwtService } from './jwt-service';
 import { auditService } from './audit-service';
 import { rateLimitService } from './rate-limit-service';
 import { hashPassword, verifyPassword, generateRefreshToken, hashToken } from '../utils/crypto';
-import { AuthenticationError, NotFoundError } from '../utils/errors';
+import { AuthenticationError, AuthorizationError, NotFoundError } from '../utils/errors';
 import { addSeconds, getTimestamp, getIpAddress, getUserAgent } from '../utils/helpers';
 import { drizzle } from 'drizzle-orm/d1';
 import { refreshTokens } from '../db/schema';
@@ -283,9 +283,14 @@ export class AuthService {
 
     // Get user
     const user = await userService.getUserById(env, project.userTableName, tokenRecord.userId);
-    if (!user || user.status !== 'active') {
-      throw new AuthenticationError('User not found or inactive');
+    if (!user) {
+      throw new AuthenticationError('User not found');
     }
+
+    // Suspended/deleted users must not be able to mint new tokens even
+    // if their old refresh-token row is still valid. Suspended -> 403,
+    // deleted -> 401 (matches the rest of the auth surface).
+    assertUserCanRefresh(user);
 
     // Update last used
     await db
@@ -429,6 +434,26 @@ export class AuthService {
           eq(refreshTokens.revoked, false)
         )
       );
+  }
+}
+
+/**
+ * Gate a refresh-token user lookup against their account status.
+ *
+ * - suspended -> AuthorizationError (403): the user *was* authenticated;
+ *   we're refusing service while the suspension is in effect.
+ * - deleted   -> AuthenticationError (401): no usable identity remains.
+ * - active    -> no-op.
+ *
+ * Used by authService.refreshToken and exposed so it can be tested
+ * without spinning up the full Drizzle refresh-token query chain.
+ */
+export function assertUserCanRefresh(user: User): void {
+  if (user.status === 'suspended') {
+    throw new AuthorizationError('Account is suspended');
+  }
+  if (user.status === 'deleted') {
+    throw new AuthenticationError('Account has been deleted');
   }
 }
 
