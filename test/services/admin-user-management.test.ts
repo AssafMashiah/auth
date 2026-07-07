@@ -174,6 +174,71 @@ describe('UserService.listUsers (A1)', () => {
 
     expect(captured[0]).not.toContain("LIKE ?");
   });
+
+  it('aliases snake_case columns to camelCase on the SELECT clause', async () => {
+    // Regression: formatUserListRow reads camelCase fields (passwordHash,
+    // lastLoginAt, oauthProvider). D1 returns snake_case unless we alias
+    // in SQL, so this test pins the SELECT projection to those aliases.
+    const captured: string[] = [];
+    mockDB.prepare.mockImplementation((q: string) => {
+      captured.push(q);
+      return {
+        bind: vi.fn().mockReturnValue({
+          all: vi.fn().mockResolvedValue({ results: [] }),
+        }),
+      };
+    });
+
+    await service.listUsers(env, 'proj_1_users', {});
+
+    expect(captured[0]).toMatch(/password_hash\s+AS\s+passwordHash/i);
+    expect(captured[0]).toMatch(/last_login_at\s+AS\s+lastLoginAt/i);
+    expect(captured[0]).toMatch(/oauth_provider\s+AS\s+oauthProvider/i);
+    expect(captured[0]).toMatch(/display_name\s+AS\s+displayName/i);
+  });
+
+  it('returns camelCase rows end-to-end (SQL aliases applied, formatter happy)', async () => {
+    // Regression for the A1 E2E bug: listUsers must project snake_case
+    // columns to the camelCase User shape so formatUserListRow sees
+    // passwordHash / lastLoginAt / oauthProvider instead of undefined.
+    // The SELECT-aliases test above pins the projection; here we verify
+    // that whatever shape D1 hands back (rows keyed by the aliased
+    // column names), formatUserListRow produces a correct A1 row.
+    const aliasedRow = {
+      id: 'user-1',
+      email: 'alice@example.com',
+      emailVerified: 1,
+      phone: null,
+      phoneVerified: 0,
+      passwordHash: 'hash',
+      oauthProvider: 'google',
+      oauthProviderUserId: 'gid-1',
+      oauthRawUserData: null,
+      displayName: 'Alice',
+      avatarUrl: null,
+      metadata: null,
+      status: 'active',
+      createdAt: '2026-07-06T18:00:00.000Z',
+      updatedAt: '2026-07-06T18:00:00.000Z',
+      lastLoginAt: '2026-07-06T18:00:00.000Z',
+    };
+
+    mockDB.prepare.mockReturnValue({
+      bind: vi.fn().mockReturnValue({
+        all: vi.fn().mockResolvedValue({ results: [aliasedRow] }),
+      }),
+    });
+
+    const users = await service.listUsers(env, 'proj_1_users', {});
+
+    expect(users[0].passwordHash).toBe('hash');
+    expect(users[0].oauthProvider).toBe('google');
+    expect(users[0].lastLoginAt).toBe('2026-07-06T18:00:00.000Z');
+
+    const row = formatUserListRow(users[0]);
+    expect(row.providers).toEqual(['password', 'google']);
+    expect(row.lastLoginAt).toBe('2026-07-06T18:00:00.000Z');
+  });
 });
 
 describe('UserService.countUsers (A1)', () => {

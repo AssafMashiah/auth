@@ -138,15 +138,12 @@ export class AuthService {
         throw new AuthenticationError('Account is not active');
       }
 
-      // D1 returns snake_case column names, not camelCase
-      const passwordHash = (user as any).password_hash || user.passwordHash;
-
-      if (!passwordHash) {
+      if (!user.passwordHash) {
         throw new AuthenticationError('Password authentication not set up. Please use OAuth.');
       }
 
       // Verify password
-      const isValidPassword = await verifyPassword(data.password, passwordHash);
+      const isValidPassword = await verifyPassword(data.password, user.passwordHash);
       if (!isValidPassword) {
         throw new AuthenticationError('Invalid credentials');
       }
