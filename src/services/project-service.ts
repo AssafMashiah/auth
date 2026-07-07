@@ -64,10 +64,16 @@ export class ProjectService {
       createdBy: adminUserId || null,
     };
 
+    // Insert project (without user_table_name initially).
+    // D1 does not reliably support Drizzle's .returning() clause, so we run
+    // the INSERT and then SELECT the row back by id. The INSERT itself
+    // commits; only the RETURNING projection is unsafe.
+    await db.insert(projects).values(projectData);
+
     const result = await db
-      .insert(projects)
-      .values(projectData)
-      .returning()
+      .select()
+      .from(projects)
+      .where(eq(projects.id, projectId))
       .get();
 
     if (!result) {
@@ -83,13 +89,13 @@ export class ProjectService {
       // Create dedicated user table for this project
       await this.createProjectUserTable(env.DB, project.id, userTableName);
 
-      // Update project with user table name
-      const updated = await db
+      // Update project with user table name.
+      // D1 does not reliably support .returning(); we don't need the result
+      // here, so the UPDATE runs without the projection.
+      await db
         .update(projects)
         .set({ userTableName })
-        .where(eq(projects.id, project.id))
-        .returning()
-        .get();
+        .where(eq(projects.id, project.id));
 
       // Create default rate limit rules
       await this.createDefaultRateLimits(env, project.id);
@@ -330,12 +336,23 @@ export class ProjectService {
         : data.redirectUrls;
     }
 
-    const updated = await db
+    // Update project.
+    // D1 does not reliably support Drizzle's .returning() clause, so we run
+    // the UPDATE and then SELECT the row back by id.
+    await db
       .update(projects)
       .set(updateData)
+      .where(eq(projects.id, projectId));
+
+    const updated = await db
+      .select()
+      .from(projects)
       .where(eq(projects.id, projectId))
-      .returning()
       .get();
+
+    if (!updated) {
+      throw new NotFoundError('Project not found');
+    }
 
     // Log audit event
     await auditService.logEvent(env, {
