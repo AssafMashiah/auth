@@ -5,6 +5,35 @@ import { NotFoundError, ConflictError } from '../utils/errors';
 import { hashPassword } from '../utils/crypto';
 
 /**
+ * SELECT clause for the dynamic per-project user table, aliased to
+ * the camelCase `User` shape.
+ *
+ * D1 returns column names exactly as the schema declares them
+ * (snake_case), but the rest of the codebase consumes the `User`
+ * interface (camelCase). Aliasing in SQL keeps the mapping in one
+ * place and avoids the brittle `(row as any).snake_name || row.camelName`
+ * shims scattered through callers.
+ */
+const USER_COLUMNS = `
+  id,
+  email,
+  email_verified AS emailVerified,
+  phone,
+  phone_verified AS phoneVerified,
+  password_hash AS passwordHash,
+  oauth_provider AS oauthProvider,
+  oauth_provider_user_id AS oauthProviderUserId,
+  oauth_raw_user_data AS oauthRawUserData,
+  display_name AS displayName,
+  avatar_url AS avatarUrl,
+  metadata,
+  status,
+  created_at AS createdAt,
+  updated_at AS updatedAt,
+  last_login_at AS lastLoginAt
+`;
+
+/**
  * User Service - Manages users in per-project tables
  */
 export class UserService {
@@ -23,7 +52,7 @@ export class UserService {
     const safeName = sanitizeTableName(tableName);
 
     const result = await env.DB.prepare(
-      `SELECT * FROM ${safeName} WHERE email = ? AND status != 'deleted' LIMIT 1`
+      `SELECT ${USER_COLUMNS} FROM ${safeName} WHERE email = ? AND status != 'deleted' LIMIT 1`
     ).bind(email).first();
 
     return result as User | null;
@@ -44,7 +73,7 @@ export class UserService {
     const safeName = sanitizeTableName(tableName);
 
     const result = await env.DB.prepare(
-      `SELECT * FROM ${safeName} WHERE id = ? AND status != 'deleted' LIMIT 1`
+      `SELECT ${USER_COLUMNS} FROM ${safeName} WHERE id = ? AND status != 'deleted' LIMIT 1`
     ).bind(userId).first();
 
     return result as User | null;
@@ -67,7 +96,7 @@ export class UserService {
     const safeName = sanitizeTableName(tableName);
 
     const result = await env.DB.prepare(
-      `SELECT * FROM ${safeName}
+      `SELECT ${USER_COLUMNS} FROM ${safeName}
        WHERE oauth_provider = ? AND oauth_provider_user_id = ? AND status != 'deleted'
        LIMIT 1`
     ).bind(provider, providerUserId).first();
@@ -102,7 +131,7 @@ export class UserService {
 
     // Check if there's a deleted user with this email
     const deletedUser = await env.DB.prepare(
-      `SELECT * FROM ${safeName} WHERE email = ? AND status = 'deleted' LIMIT 1`
+      `SELECT 1 FROM ${safeName} WHERE email = ? AND status = 'deleted' LIMIT 1`
     ).bind(data.email).first();
 
     // If a deleted user exists, reactivate them instead of creating new
@@ -284,7 +313,11 @@ export class UserService {
   }
 
   /**
-   * List users in project table
+   * List users in project table.
+   *
+   * Pagination and search are applied at the SQL level so `total` (via
+   * countUsers) reflects the same filter set.
+   *
    * @param env - Environment bindings
    * @param tableName - User table name
    * @param filters - Filter options
@@ -295,6 +328,7 @@ export class UserService {
     tableName: string,
     filters?: {
       status?: string;
+      search?: string;
       limit?: number;
       offset?: number;
     }
@@ -303,12 +337,18 @@ export class UserService {
     const limit = filters?.limit || 50;
     const offset = filters?.offset || 0;
 
-    let query = `SELECT * FROM ${safeName} WHERE status != 'deleted'`;
+    let query = `SELECT ${USER_COLUMNS} FROM ${safeName} WHERE status != 'deleted'`;
     const params: any[] = [];
 
     if (filters?.status) {
       query += ` AND status = ?`;
       params.push(filters.status);
+    }
+
+    if (filters?.search) {
+      query += ` AND (email LIKE ? OR display_name LIKE ?)`;
+      const term = `%${filters.search}%`;
+      params.push(term, term);
     }
 
     query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
@@ -319,16 +359,22 @@ export class UserService {
   }
 
   /**
-   * Count users in project table
+   * Count users in project table.
+   *
+   * Accepts the same filter set as listUsers so callers can pair them
+   * to produce a total that matches the rendered page.
+   *
    * @param env - Environment bindings
    * @param tableName - User table name
    * @param status - Optional status filter
+   * @param search - Optional search term (matches email OR display_name)
    * @returns User count
    */
   async countUsers(
     env: Env,
     tableName: string,
-    status?: string
+    status?: string,
+    search?: string
   ): Promise<number> {
     const safeName = sanitizeTableName(tableName);
 
@@ -338,6 +384,12 @@ export class UserService {
     if (status) {
       query += ` AND status = ?`;
       params.push(status);
+    }
+
+    if (search) {
+      query += ` AND (email LIKE ? OR display_name LIKE ?)`;
+      const term = `%${search}%`;
+      params.push(term, term);
     }
 
     const result = await env.DB.prepare(query).bind(...params).first();

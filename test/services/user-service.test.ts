@@ -79,7 +79,11 @@ describe('UserService', () => {
       await service.getUserByEmail(env, 'test; DROP TABLE users--', 'test@example.com');
 
       const prepareCall = preparedStatements[0];
-      expect(prepareCall).toBe('SELECT * FROM testDROPTABLEusers WHERE email = ? AND status != \'deleted\' LIMIT 1');
+      // SELECT clause is now an explicit column list (aliased to camelCase),
+      // so the projection is allowed to grow: we just assert the table name
+      // was sanitized and the WHERE clause is intact.
+      expect(prepareCall).toContain('FROM testDROPTABLEusers');
+      expect(prepareCall).toContain("WHERE email = ? AND status != 'deleted' LIMIT 1");
     });
   });
 
@@ -150,14 +154,14 @@ describe('UserService', () => {
   describe('createUser', () => {
     it('should create new user', async () => {
       mockDB.prepare.mockImplementation((query: string) => {
-        if (query.includes('SELECT * FROM') && query.includes('WHERE email = ?')) {
+        if (query.includes('WHERE email = ?') && query.includes("AND status != 'deleted'")) {
           return {
             bind: vi.fn().mockReturnValue({
               first: vi.fn().mockResolvedValue(null),
             }),
           };
         }
-        if (query.includes('SELECT * FROM') && query.includes('status = \'deleted\'')) {
+        if (query.includes("status = 'deleted'")) {
           return {
             bind: vi.fn().mockReturnValue({
               first: vi.fn().mockResolvedValue(null),
@@ -171,7 +175,7 @@ describe('UserService', () => {
             }),
           };
         }
-        if (query.includes('SELECT * FROM') && query.includes('WHERE id = ?')) {
+        if (query.includes('WHERE id = ?') && query.includes("AND status != 'deleted'")) {
           return {
             bind: vi.fn().mockReturnValue({
               first: vi.fn().mockResolvedValue({
@@ -220,14 +224,14 @@ describe('UserService', () => {
       };
 
       mockDB.prepare.mockImplementation((query: string) => {
-        if (query.includes('SELECT * FROM') && query.includes('WHERE email = ?') && query.includes('status != \'deleted\'')) {
+        if (query.includes('WHERE email = ?') && query.includes("AND status != 'deleted'")) {
           return {
             bind: vi.fn().mockReturnValue({
               first: vi.fn().mockResolvedValue(null),
             }),
           };
         }
-        if (query.includes('status = \'deleted\'')) {
+        if (query.includes("status = 'deleted'")) {
           return {
             bind: vi.fn().mockReturnValue({
               first: vi.fn().mockResolvedValue(deletedUser),
@@ -280,7 +284,7 @@ describe('UserService', () => {
             }),
           };
         }
-        if (query.includes('SELECT * FROM') && query.includes('WHERE id = ?')) {
+        if (query.includes('WHERE id = ?') && query.includes("AND status != 'deleted'")) {
           return {
             bind: vi.fn().mockReturnValue({
               first: vi.fn().mockResolvedValue({
@@ -340,17 +344,13 @@ describe('UserService', () => {
   describe('deleteUser', () => {
     it('should soft delete user', async () => {
       mockDB.prepare.mockImplementation((query: string) => {
-        if (query.includes('SELECT * FROM') && query.includes('WHERE email = ?')) {
+        if (query.includes('WHERE id = ?') && query.includes("AND status != 'deleted'")) {
           return {
             bind: vi.fn().mockReturnValue({
-              first: vi.fn().mockResolvedValue(null),
-            }),
-          };
-        }
-        if (query.includes('SELECT * FROM') && query.includes('status = \'deleted\'')) {
-          return {
-            bind: vi.fn().mockReturnValue({
-              first: vi.fn().mockResolvedValue(null),
+              first: vi.fn().mockResolvedValue({
+                id: 'user-123',
+                status: 'deleted',
+              }),
             }),
           };
         }
@@ -358,16 +358,6 @@ describe('UserService', () => {
           return {
             bind: vi.fn().mockReturnValue({
               run: vi.fn().mockResolvedValue({ success: true }),
-            }),
-          };
-        }
-        if (query.includes('SELECT * FROM') && query.includes('WHERE id = ?')) {
-          return {
-            bind: vi.fn().mockReturnValue({
-              first: vi.fn().mockResolvedValue({
-                id: 'user-123',
-                status: 'deleted',
-              }),
             }),
           };
         }
