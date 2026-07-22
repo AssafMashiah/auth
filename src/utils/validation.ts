@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ValidationError } from './errors';
 
 // ============================================================
 // PROJECT VALIDATION
@@ -190,7 +191,7 @@ export function validate<T>(schema: z.ZodSchema<T>, data: unknown): T {
     const errors = result.error.issues.map(
       (e) => `${e.path.join(".")}: ${e.message}`,
     );
-    throw new Error(`Validation failed: ${errors.join(', ')}`);
+    throw new ValidationError(`Validation failed: ${errors.join(', ')}`);
   }
   return result.data;
 }
