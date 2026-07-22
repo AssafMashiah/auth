@@ -13,6 +13,7 @@ import {
   isValidEmail,
   sanitizeProjectName,
 } from '../../src/utils/validation';
+import { ValidationError } from '../../src/utils/errors';
 
 describe('Validation Utils', () => {
   describe('createProjectSchema', () => {
@@ -195,6 +196,14 @@ describe('Validation Utils', () => {
       const data = { email: 'test@example.com' };
 
       expect(() => validate(loginSchema, data)).toThrow();
+    });
+
+    it('should reject an empty body with ValidationError', () => {
+      expect(() => validate(loginSchema, {})).toThrow(ValidationError);
+    });
+
+    it('should include field-level details in the validation error message', () => {
+      expect(() => validate(loginSchema, {})).toThrow(/email:.*password:/);
     });
   });
 

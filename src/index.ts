@@ -42,6 +42,15 @@ import {
 } from './utils/validation';
 import { getIpAddress, getUserAgent } from './utils/helpers';
 import { initializeDatabase } from './utils/setup';
+import { BadRequestError } from './utils/errors';
+
+async function parseJsonBody(c: any): Promise<any> {
+  try {
+    return await c.req.json();
+  } catch {
+    throw new BadRequestError('Invalid JSON body');
+  }
+}
 
 // Initialize Hono app
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -120,7 +129,7 @@ app.get('/admin', (c) => {
 
 // Admin login
 app.post('/api/admin/login', async (c) => {
-  const body = await c.req.json();
+  const body = await parseJsonBody(c);
   const data = validate(adminLoginSchema, body);
 
   const ipAddress = getIpAddress(c.req.raw);
@@ -900,7 +909,7 @@ app.delete('/api/admin/projects/:projectId/email-templates/:id', adminAuthMiddle
 // Register
 app.post('/api/auth/:projectId/register', async (c) => {
   const projectId = c.req.param('projectId');
-  const body = await c.req.json();
+  const body = await parseJsonBody(c);
   const data = validate(registerSchema, body);
 
   const result = await authService.register(c.env, projectId, data, c.req.raw);
@@ -973,7 +982,7 @@ app.post('/api/auth/:projectId/register', async (c) => {
 // Login
 app.post('/api/auth/:projectId/login', async (c) => {
   const projectId = c.req.param('projectId');
-  const body = await c.req.json();
+  const body = await parseJsonBody(c);
   const data = validate(loginSchema, body);
 
   const result = await authService.login(c.env, projectId, data, c.req.raw);
@@ -1012,7 +1021,7 @@ app.get('/api/auth/:projectId/me', authMiddleware, async (c) => {
 // Refresh token
 app.post('/api/auth/:projectId/refresh', async (c) => {
   const projectId = c.req.param('projectId');
-  const body = await c.req.json();
+  const body = await parseJsonBody(c);
 
   const result = await authService.refreshToken(c.env, projectId, body.refreshToken);
 
@@ -1040,7 +1049,7 @@ app.post('/api/auth/:projectId/logout', async (c) => {
 // Forgot password
 app.post('/api/auth/:projectId/forgot-password', async (c) => {
   const projectId = c.req.param('projectId');
-  const body = await c.req.json();
+  const body = await parseJsonBody(c);
   const data = validate(forgotPasswordSchema, body);
 
   const ipAddress = getIpAddress(c.req.raw);
@@ -1131,7 +1140,7 @@ app.post('/api/auth/:projectId/forgot-password', async (c) => {
 // Reset password
 app.post('/api/auth/:projectId/reset-password', async (c) => {
   const projectId = c.req.param('projectId');
-  const body = await c.req.json();
+  const body = await parseJsonBody(c);
   const data = validate(resetPasswordSchema, body);
 
   const ipAddress = getIpAddress(c.req.raw);
