@@ -52,6 +52,16 @@ const makeRequest = async (
   return app.fetch(request, env);
 };
 
+const makeRawJsonRequest = async (path: string, body: string) => {
+  const request = new Request(`http://localhost${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  });
+
+  return app.fetch(request, createTestEnv());
+};
+
 describe('E2E - Auth Endpoints with New ID Format', () => {
   describe('POST /api/auth/:projectId/register', () => {
     it('should accept registration with underscored project ID', async () => {
@@ -130,6 +140,32 @@ describe('E2E - Auth Endpoints with New ID Format', () => {
       });
 
       expect(response.status).not.toBe(404);
+    });
+
+    it('should return 400 for an empty JSON body', async () => {
+      const response = await makeRequest('POST', '/api/auth/test_project/login', {});
+
+      expect(response.status).toBe(400);
+    });
+  });
+
+  describe('Malformed JSON bodies', () => {
+    const routes = [
+      '/api/admin/login',
+      '/api/auth/test_project/register',
+      '/api/auth/test_project/login',
+      '/api/auth/test_project/refresh',
+      '/api/auth/test_project/forgot-password',
+      '/api/auth/test_project/reset-password',
+    ];
+
+    it.each(routes)('should return 400 for POST %s', async (route) => {
+      const response = await makeRawJsonRequest(route, '{"broken":');
+      const payload = await response.json() as { error: string; code: string };
+
+      expect(response.status).toBe(400);
+      expect(payload.error).toBe('Invalid JSON body');
+      expect(payload.code).toBe('BAD_REQUEST');
     });
   });
 
