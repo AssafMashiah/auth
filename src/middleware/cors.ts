@@ -6,13 +6,18 @@ import type { Env } from '../types';
  */
 export async function corsMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
   const origin = c.req.header('Origin');
-  const adminDomain = c.env.ADMIN_DOMAIN || '*';
+  const allowedOrigins = (c.env.ADMIN_DOMAIN || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
 
-  // Set CORS headers
-  c.header('Access-Control-Allow-Origin', origin || adminDomain);
-  c.header('Access-Control-Allow-Credentials', 'true');
-  c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Session');
+  if (origin && allowedOrigins.includes(origin)) {
+    c.header('Access-Control-Allow-Origin', origin);
+    c.header('Access-Control-Allow-Credentials', 'true');
+    c.header('Vary', 'Origin');
+    c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token');
+  }
 
   // Handle preflight
   if (c.req.method === 'OPTIONS') {

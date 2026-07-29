@@ -16,3 +16,6 @@ yarn-error.log*
 admin/dist
 admin/node_modules
 coverage
+
+# Local agent worktrees
+/.worktrees/
