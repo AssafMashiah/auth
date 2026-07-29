@@ -18,7 +18,7 @@
     "Every auth endpoint requires a projectId obtained via POST /api/admin/projects.",
     "Admin endpoints require X-Admin-Session header from POST /api/admin/login.",
     "Run migrations before first use: npm run db:migrate (remote) or npm run db:migrate:local (dev).",
-    "Change default admin credentials (admin@example.com / Admin123!) immediately after first deployment.",
+    "Set AUTH_BOOTSTRAP_SECRET and use the one-time bootstrap flow to create the first super admin.",
     "D1 is eventually consistent — do not expect immediate read-after-write in the same request."
   ]
 }

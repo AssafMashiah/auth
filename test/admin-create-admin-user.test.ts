@@ -18,7 +18,9 @@ import type { Env } from '../src/types';
  */
 
 const LIVE_AUTH_URL = 'https://auth.buildingis.art';
-const shouldRunLive = !!process.env.RUN_LIVE_AUTH_TESTS;
+const LIVE_ADMIN_EMAIL = process.env.LIVE_ADMIN_EMAIL;
+const LIVE_ADMIN_PASSWORD = process.env.LIVE_ADMIN_PASSWORD;
+const shouldRunLive = !!process.env.RUN_LIVE_AUTH_TESTS && !!LIVE_ADMIN_EMAIL && !!LIVE_ADMIN_PASSWORD;
 const describeLive = shouldRunLive ? describe : describe.skip;
 
 const postJson = async (
@@ -41,9 +43,9 @@ const liveAdminLogin = async (email: string, password: string) =>
   postJson('/api/admin/login', { email, password });
 
 describe('Admin User Creation - Live auth.buildingis.art', () => {
-  describeLive('POST /api/admin/login (existing seed admin can authenticate)', () => {
-    it('admin@example.com can login (needed to authenticate before creating new admins)', async () => {
-      const { status, json } = await liveAdminLogin('admin@example.com', 'admin123');
+  describeLive('POST /api/admin/login (configured admin can authenticate)', () => {
+    it('configured live admin can login', async () => {
+      const { status, json } = await liveAdminLogin(LIVE_ADMIN_EMAIL!, LIVE_ADMIN_PASSWORD!);
       expect(status).toBe(200);
       expect(json?.success).toBe(true);
       expect(typeof json?.data?.sessionToken).toBe('string');

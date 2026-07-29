@@ -5,6 +5,7 @@ export interface Env {
   EMAIL?: any; // Cloudflare send_email binding (SendEmail)
   EMAIL_FROM?: string; // Default from address for the binding
   ADMIN_SESSION_SECRET?: string;
+  AUTH_BOOTSTRAP_SECRET?: string;
   ENCRYPTION_KEY?: string;
   ADMIN_DOMAIN?: string;
   SENDGRID_API_KEY?: string;

@@ -4,6 +4,7 @@ import { api } from './lib/api';
 
 // Pages
 import Login from './pages/Login';
+import BootstrapSetup from './pages/BootstrapSetup';
 import Dashboard from './pages/Dashboard';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/ProjectDetail';
@@ -91,6 +92,7 @@ function AppRoutes() {
 
   return (
     <Routes>
+      <Route path="/setup" element={<BootstrapSetup />} />
       <Route
         path="/login"
         element={

@@ -33,11 +33,10 @@ This will:
 3. Set up a D1 database and run all migrations.
 4. Deploy the admin UI and API.
 
-**Default Admin Credentials:**
-- Email: `admin@example.com`
-- Password: `admin123`
-
-> **Important:** Change these credentials immediately after logging in!
+**Initial admin setup:** No default or seeded super-admin credentials are
+provided. Set `AUTH_BOOTSTRAP_SECRET` and follow
+[`docs/SECURITY-BOOTSTRAP.md`](docs/SECURITY-BOOTSTRAP.md) to issue a one-time
+setup URL and create the first self-chosen-password super admin.
 
 ### Post-Deploy Configuration
 
@@ -47,6 +46,7 @@ After deployment, your Worker is live at `https://auth.<your-account>.workers.de
 
 ```bash
 wrangler secret put ADMIN_SESSION_SECRET  # openssl rand -base64 32
+wrangler secret put AUTH_BOOTSTRAP_SECRET # deploy-time secret for first super-admin setup
 wrangler secret put ENCRYPTION_KEY        # openssl rand -base64 32
 ```
 

@@ -16,10 +16,6 @@ export default function Login({ onLogin }: LoginProps) {
     setError('');
     setLoading(true);
 
-    // Clear any stale setup flag from a previous login so the response
-    // is the single source of truth for this session.
-    localStorage.removeItem("admin_requires_setup");
-
     try {
       const response = await api.login(email, password);
       // Store current user info
@@ -30,9 +26,7 @@ export default function Login({ onLogin }: LoginProps) {
             JSON.stringify(response.data.admin),
           );
         }
-        if (response.data.requiresSetup) {
-          localStorage.setItem("admin_requires_setup", "true");
-        }
+
       }
       onLogin();
     } catch (err) {
@@ -71,7 +65,7 @@ export default function Login({ onLogin }: LoginProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="input w-full"
-              placeholder="admin@example.com"
+              placeholder="you@example.com"
               required
               autoFocus
             />
