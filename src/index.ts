@@ -9,6 +9,7 @@ import { adminAuthMiddleware } from './middleware/admin-auth';
 import { projectService } from './services/project-service';
 import { authService } from './services/auth-service';
 import { adminAuthService } from './services/admin-auth-service';
+import { adminBootstrapService } from './services/admin-bootstrap-service';
 import { oauthService } from './services/oauth-service';
 import { auditService } from './services/audit-service';
 import { userService } from './services/user-service';
@@ -38,6 +39,7 @@ import {
   importFromSupabaseSchema,
   getImportPreviewSchema,
   forgotPasswordSchema,
+  completeAdminBootstrapSchema,
   resetPasswordSchema
 } from './utils/validation';
 import { getIpAddress, getUserAgent } from './utils/helpers';
@@ -153,9 +155,33 @@ app.post('/api/admin/login', async (c) => {
         displayName: admin.displayName,
         role: admin.role,
       },
-      requiresSetup: admin.email === "admin@example.com",
     },
   });
+});
+
+// Initial super-admin bootstrap is protected by a Wrangler secret rather than
+// an admin session, because no privileged account exists yet. It is disabled
+// permanently once a super_admin exists.
+app.post('/api/admin/bootstrap', async (c) => {
+  const result = await adminBootstrapService.issueSetupUrl(
+    c.env,
+    c.env.AUTH_BOOTSTRAP_SECRET,
+    c.req.header('X-Auth-Bootstrap-Secret'),
+    new URL(c.req.url).origin,
+  );
+  return c.json({ success: true, data: result });
+});
+
+app.post('/api/admin/bootstrap/complete', async (c) => {
+  const body = await parseJsonBody(c);
+  const data = validate(completeAdminBootstrapSchema, body);
+  const admin = await adminBootstrapService.completeSetup(
+    c.env,
+    c.env.AUTH_BOOTSTRAP_SECRET,
+    c.req.header('X-Auth-Bootstrap-Secret'),
+    data,
+  );
+  return c.json({ success: true, data: admin }, 201);
 });
 
 // Admin logout

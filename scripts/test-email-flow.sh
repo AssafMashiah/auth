@@ -4,6 +4,8 @@
 # Tests all email-related functionality including confirmation and password reset
 
 BASE_URL="http://localhost:8787"
+ADMIN_EMAIL="${ADMIN_EMAIL:?Set ADMIN_EMAIL for an existing admin}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:?Set ADMIN_PASSWORD for that admin}"
 ADMIN_SESSION=""
 PROJECT_ID=""
 USER_ID=""
@@ -69,19 +71,11 @@ print_section() {
 
 print_section "📝 Step 1: Admin Setup & Login"
 
-echo "Admin user credentials:"
-echo "   Email: admin@example.com"
-echo "   Password: Admin123!"
-echo ""
-
 echo "🔐 Testing Admin Login..."
 ADMIN_LOGIN_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
     "$BASE_URL/api/admin/login" \
     -H "Content-Type: application/json" \
-    -d '{
-        "email": "admin@example.com",
-        "password": "Admin123!"
-    }')
+    -d "{\"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\"}")
 
 HTTP_CODE=$(echo "$ADMIN_LOGIN_RESPONSE" | tail -1)
 RESPONSE_BODY=$(echo "$ADMIN_LOGIN_RESPONSE" | sed '$d')

@@ -33,6 +33,9 @@ name = "EMAIL"
 # - ADMIN_SESSION_SECRET: Secret key for admin session management
 #   Set with: wrangler secret put ADMIN_SESSION_SECRET
 #
+# - AUTH_BOOTSTRAP_SECRET: Required to issue and complete initial super-admin setup
+#   Set with: wrangler secret put AUTH_BOOTSTRAP_SECRET
+#
 # - ENCRYPTION_KEY: Key for encrypting sensitive data (32 bytes, base64 encoded)
 #   Set with: wrangler secret put ENCRYPTION_KEY
 #

@@ -75,7 +75,7 @@ class ApiClient {
 
   // Admin Auth
   async login(email: string, password: string) {
-    const result = await this.request<{ sessionToken: string; admin: any; requiresSetup?: boolean }>(
+    const result = await this.request<{ sessionToken: string; admin: any }>(
       '/admin/login',
       {
         method: 'POST',

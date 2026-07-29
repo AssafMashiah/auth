@@ -2,6 +2,8 @@
 
 # Simple Auth Service Test Script
 BASE_URL="http://localhost:8787"
+ADMIN_EMAIL="${ADMIN_EMAIL:?Set ADMIN_EMAIL for an existing admin}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:?Set ADMIN_PASSWORD for that admin}"
 
 echo "🧪 Testing Auth Service"
 echo "======================="
@@ -11,7 +13,7 @@ echo ""
 echo "1️⃣  Testing admin login..."
 RESPONSE=$(curl -s -X POST "$BASE_URL/api/admin/login" \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@example.com","password":"Admin123!"}')
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
 
 echo "Response: $RESPONSE"
 SESSION_TOKEN=$(echo $RESPONSE | grep -o '"sessionToken":"[^"]*"' | cut -d'"' -f4)

@@ -128,6 +128,15 @@ export const createAdminUserSchema = z.object({
   role: z.enum(['super_admin', 'admin', 'viewer']).default('admin'),
 });
 
+export const completeAdminBootstrapSchema = z.object({
+  token: z.string().min(1, 'Bootstrap token is required'),
+  email: z.string().email('Invalid email address'),
+  password: z.string()
+    .min(12, 'Admin password must be at least 12 characters')
+    .max(72, 'Password must be at most 72 characters'),
+  displayName: z.string().min(1, 'Display name is required'),
+});
+
 export const updateAdminUserSchema = z.object({
   displayName: z.string().min(1).optional(),
   role: z.enum(['super_admin', 'admin', 'viewer']).optional(),
