@@ -10,23 +10,12 @@ interface ApiResponse<T> {
 }
 
 class ApiClient {
-  private sessionToken: string | null = null;
   private onSessionExpired?: () => void;
 
-  setSessionToken(token: string | null) {
-    this.sessionToken = token;
-    if (token) {
-      localStorage.setItem('admin_session', token);
-    } else {
-      localStorage.removeItem('admin_session');
-    }
-  }
-
+  // Admin identity metadata is not bearer material; the HttpOnly session
+  // cookie is the only credential.
   getSessionToken(): string | null {
-    if (!this.sessionToken) {
-      this.sessionToken = localStorage.getItem('admin_session');
-    }
-    return this.sessionToken;
+    return localStorage.getItem('admin_user');
   }
 
   setSessionExpiredHandler(handler: () => void) {
@@ -34,7 +23,6 @@ class ApiClient {
   }
 
   private handleAuthError() {
-    this.setSessionToken(null);
     if (this.onSessionExpired) {
       this.onSessionExpired();
     }
@@ -49,14 +37,15 @@ class ApiClient {
       ...(options.headers as Record<string, string>),
     };
 
-    const token = this.getSessionToken();
-    if (token) {
-      headers['X-Admin-Session'] = token;
+    const csrfToken = document.cookie.match(/(?:^|;\s*)admin_csrf=([^;]+)/)?.[1];
+    if (csrfToken && !['GET', 'HEAD'].includes((options.method || 'GET').toUpperCase())) {
+      headers['X-CSRF-Token'] = decodeURIComponent(csrfToken);
     }
 
     const response = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
       headers,
+      credentials: 'same-origin',
     });
 
     const data = await response.json();
@@ -75,7 +64,7 @@ class ApiClient {
 
   // Admin Auth
   async login(email: string, password: string) {
-    const result = await this.request<{ sessionToken: string; admin: any; requiresSetup?: boolean }>(
+    return this.request<{ admin: any; csrfToken?: string }>(
       '/admin/login',
       {
         method: 'POST',
@@ -83,11 +72,7 @@ class ApiClient {
       }
     );
 
-    if (result.data?.sessionToken) {
-      this.setSessionToken(result.data.sessionToken);
-    }
 
-    return result;
   }
 
   async logout() {
@@ -96,8 +81,6 @@ class ApiClient {
     } catch (error) {
       // Ignore errors during logout (session may already be invalid)
       console.log('Logout request failed, clearing session anyway');
-    } finally {
-      this.setSessionToken(null);
     }
   }
 

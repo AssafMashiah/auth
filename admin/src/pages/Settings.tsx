@@ -934,9 +934,11 @@ function EmailTemplatesTab({ templates, onUpdate }: { templates: EmailTemplate[]
               </button>
             </div>
             <div className="flex-1 overflow-auto p-8 bg-gray-100 dark:bg-gray-900">
-               <div
-                 className="bg-white text-black mx-auto max-w-2xl min-h-[400px] shadow-sm p-8 rounded-sm"
-                 dangerouslySetInnerHTML={{ __html: editingTemplate.bodyHtml }}
+               <iframe
+                 title="Email template preview"
+                 sandbox=""
+                 className="bg-white text-black mx-auto block w-full max-w-2xl min-h-[400px] shadow-sm rounded-sm"
+                 srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src https: http: data:;">${editingTemplate.bodyHtml}`}
                />
             </div>
           </div>

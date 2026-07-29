@@ -8,12 +8,19 @@ import { AuthenticationError, AuthorizationError } from '../utils/errors';
  * Verifies admin session and attaches admin user to context
  */
 export async function adminAuthMiddleware(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
-  // Get session token from cookie or header
-  const sessionToken = c.req.header('X-Admin-Session') ||
-                       getCookie(c.req.raw, 'admin_session');
+  // Keep the bearer material out of JavaScript-accessible storage.
+  const sessionToken = getCookie(c.req.raw, 'admin_session');
 
   if (!sessionToken) {
     throw new AuthenticationError('No admin session');
+  }
+
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
+    const csrfCookie = getCookie(c.req.raw, 'admin_csrf');
+    const csrfHeader = c.req.header('X-CSRF-Token');
+    if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+      throw new AuthorizationError('Invalid CSRF token');
+    }
   }
 
   // Verify session

@@ -376,17 +376,6 @@ BEGIN
 END;
 
 -- ============================================================
--- SEED DATA
--- ============================================================
-
--- Default Admin User (Password: admin123)
--- Hash regenerated 2026-07-14 by feat/fix-admin-user-reseed to match
--- bcryptjs cost=10 (the cost used by hashPassword() in src/utils/crypto.ts).
--- The previous hash was stale and did not verify against any plaintext.
-INSERT OR IGNORE INTO admin_users (email, password_hash, display_name, role, enabled)
-VALUES ('admin@example.com', '$2b$10$SEpCtdUi7OPESLh9CBe0Ke.2CIU0GJ/gu9vWlBmgTUVN.amgGopve', 'Admin User', 'super_admin', 1);
-
--- ============================================================
 -- SYSTEM SETTINGS TABLE
 -- ============================================================
 

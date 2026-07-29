@@ -333,6 +333,11 @@ export class AuthService {
     }
   }
 
+  /** Issue a persisted refresh token for a successful non-password authentication flow. */
+  async issueRefreshToken(env: Env, projectId: string, userId: string): Promise<string> {
+    return this.createRefreshToken(env, projectId, userId, {});
+  }
+
   /**
    * Create a refresh token
    * @param env - Environment bindings
