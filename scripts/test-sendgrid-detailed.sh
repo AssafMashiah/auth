@@ -4,6 +4,8 @@
 # Tests different email types to isolate issues
 
 BASE_URL="http://localhost:8787"
+ADMIN_EMAIL="${ADMIN_EMAIL:?Set ADMIN_EMAIL for an existing admin}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:?Set ADMIN_PASSWORD for that admin}"
 ADMIN_SESSION=""
 PROJECT_ID="1d12e5732e0d32b9500a7f6c0f01b54e"  # e2e-test-project
 USER_ID="9ded92ef-d8b6-4afa-a931-41dc169d5055"  # gilad@maoz.dev
@@ -25,7 +27,7 @@ echo "📝 Step 1: Getting Admin Session"
 ADMIN_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
     "$BASE_URL/api/admin/login" \
     -H "Content-Type: application/json" \
-    -d '{"email": "admin@example.com", "password": "Admin123!"}')
+    -d "{\"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\"}")
 
 HTTP_CODE=$(echo "$ADMIN_RESPONSE" | tail -1)
 RESPONSE_BODY=$(echo "$ADMIN_RESPONSE" | sed '$d')

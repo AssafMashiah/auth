@@ -3,12 +3,13 @@ import type { Env, Variables } from './types';
 import { corsMiddleware } from './middleware/cors';
 import { errorHandler } from './middleware/error-handler';
 import { authMiddleware } from './middleware/auth';
-import { adminAuthMiddleware } from './middleware/admin-auth';
+import { adminAuthMiddleware, requireRole } from './middleware/admin-auth';
 
 // Services
 import { projectService } from './services/project-service';
 import { authService } from './services/auth-service';
 import { adminAuthService } from './services/admin-auth-service';
+import { adminBootstrapService } from './services/admin-bootstrap-service';
 import { oauthService } from './services/oauth-service';
 import { auditService } from './services/audit-service';
 import { userService } from './services/user-service';
@@ -38,11 +39,13 @@ import {
   importFromSupabaseSchema,
   getImportPreviewSchema,
   forgotPasswordSchema,
+  completeAdminBootstrapSchema,
   resetPasswordSchema
 } from './utils/validation';
 import { getIpAddress, getUserAgent } from './utils/helpers';
 import { initializeDatabase } from './utils/setup';
 import { BadRequestError } from './utils/errors';
+import { createBootstrapToken, verifyBootstrapToken } from './utils/oauth-security';
 
 async function parseJsonBody(c: any): Promise<any> {
   try {
@@ -50,6 +53,10 @@ async function parseJsonBody(c: any): Promise<any> {
   } catch {
     throw new BadRequestError('Invalid JSON body');
   }
+}
+
+function cookieValue(request: Request, name: string): string | undefined {
+  return request.headers.get('Cookie')?.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))?.[1];
 }
 
 // Initialize Hono app
@@ -65,6 +72,13 @@ app.use('*', async (c, next) => {
   if (!dbInitialized) {
     try {
       await initializeDatabase(c.env);
+      if (c.env.AUTH_BOOTSTRAP_SECRET) {
+        const superAdmin = await c.env.DB.prepare("SELECT 1 FROM admin_users WHERE role = 'super_admin' LIMIT 1").first();
+        if (!superAdmin) {
+          const token = await createBootstrapToken(c.env.AUTH_BOOTSTRAP_SECRET);
+          console.warn(`No super_admin exists. Bootstrap once at ${new URL(`/api/admin/bootstrap?token=${token}`, c.req.url).toString()}`);
+        }
+      }
       dbInitialized = true;
     } catch (e) {
       console.error('Failed to initialize database:', e);
@@ -143,31 +157,62 @@ app.post('/api/admin/login', async (c) => {
     userAgent
   );
 
+  const csrfToken = crypto.randomUUID();
+  c.header('Set-Cookie', `admin_session=${encodeURIComponent(sessionToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=28800`);
+  c.header('Set-Cookie', `admin_csrf=${encodeURIComponent(csrfToken)}; Path=/; Secure; SameSite=Lax; Max-Age=28800`, { append: true });
+
   return c.json({
     success: true,
     data: {
-      sessionToken,
       admin: {
         id: admin.id,
         email: admin.email,
         displayName: admin.displayName,
         role: admin.role,
       },
-      requiresSetup: admin.email === "admin@example.com",
+      csrfToken,
     },
   });
 });
 
+// Initial super-admin bootstrap is protected by a Wrangler secret rather than
+// an admin session, because no privileged account exists yet. It is disabled
+// permanently once a super_admin exists.
+app.post('/api/admin/bootstrap', async (c) => {
+  const result = await adminBootstrapService.issueSetupUrl(
+    c.env,
+    c.env.AUTH_BOOTSTRAP_SECRET,
+    c.req.header('X-Auth-Bootstrap-Secret'),
+    new URL(c.req.url).origin,
+  );
+  return c.json({ success: true, data: result });
+});
+
+app.post('/api/admin/bootstrap/complete', async (c) => {
+  const body = await parseJsonBody(c);
+  const data = validate(completeAdminBootstrapSchema, body);
+  const admin = await adminBootstrapService.completeSetup(
+    c.env,
+    c.env.AUTH_BOOTSTRAP_SECRET,
+    c.req.header('X-Auth-Bootstrap-Secret'),
+    data,
+  );
+  return c.json({ success: true, data: admin }, 201);
+});
+
 // Admin logout
 app.post('/api/admin/logout', adminAuthMiddleware, async (c) => {
-  const sessionToken = c.req.header('X-Admin-Session') || '';
+  const sessionToken = c.req.raw.headers.get('Cookie')?.match(/(?:^|;\s*)admin_session=([^;]+)/)?.[1] || '';
   await adminAuthService.adminLogout(c.env, sessionToken);
+
+  c.header('Set-Cookie', 'admin_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+  c.header('Set-Cookie', 'admin_csrf=; Path=/; Secure; SameSite=Lax; Max-Age=0', { append: true });
 
   return c.json({ success: true, message: 'Logged out successfully' });
 });
 
 // List projects
-app.get('/api/admin/projects', adminAuthMiddleware, async (c) => {
+app.get('/api/admin/projects', adminAuthMiddleware, requireRole('super_admin', 'admin', 'viewer'), async (c) => {
   const environment = c.req.query('environment');
   const enabled = c.req.query('enabled');
   const search = c.req.query('search');
@@ -186,7 +231,7 @@ app.get('/api/admin/projects', adminAuthMiddleware, async (c) => {
 });
 
 // Create project
-app.post('/api/admin/projects', adminAuthMiddleware, async (c) => {
+app.post('/api/admin/projects', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const body = await c.req.json();
   const data = validate(createProjectSchema, body);
   const admin = c.get('admin');
@@ -201,7 +246,7 @@ app.post('/api/admin/projects', adminAuthMiddleware, async (c) => {
 });
 
 // Get project
-app.get('/api/admin/projects/:id', adminAuthMiddleware, async (c) => {
+app.get('/api/admin/projects/:id', adminAuthMiddleware, requireRole('super_admin', 'admin', 'viewer'), async (c) => {
   const id = c.req.param('id');
   const project = await projectService.getProject(c.env, id);
 
@@ -213,7 +258,7 @@ app.get('/api/admin/projects/:id', adminAuthMiddleware, async (c) => {
 });
 
 // Update project
-app.put('/api/admin/projects/:id', adminAuthMiddleware, async (c) => {
+app.put('/api/admin/projects/:id', adminAuthMiddleware, requireRole('super_admin', 'admin'), async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
   const admin = c.get('admin');
@@ -228,7 +273,7 @@ app.put('/api/admin/projects/:id', adminAuthMiddleware, async (c) => {
 });
 
 // Delete project
-app.delete('/api/admin/projects/:id', adminAuthMiddleware, async (c) => {
+app.delete('/api/admin/projects/:id', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const id = c.req.param('id');
   const admin = c.get('admin');
 
@@ -241,7 +286,7 @@ app.delete('/api/admin/projects/:id', adminAuthMiddleware, async (c) => {
 });
 
 // Configure OAuth provider
-app.post('/api/admin/projects/:id/oauth', adminAuthMiddleware, async (c) => {
+app.post('/api/admin/projects/:id/oauth', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const projectId = c.req.param('id');
   const body = await c.req.json();
 
@@ -258,7 +303,7 @@ app.post('/api/admin/projects/:id/oauth', adminAuthMiddleware, async (c) => {
 });
 
 // Get audit logs
-app.get('/api/admin/audit-logs', adminAuthMiddleware, async (c) => {
+app.get('/api/admin/audit-logs', adminAuthMiddleware, requireRole('super_admin', 'admin'), async (c) => {
   const projectId = c.req.query('projectId');
   const eventType = c.req.query('eventType');
   const limit = parseInt(c.req.query('limit') || '50');
@@ -281,7 +326,7 @@ app.get('/api/admin/audit-logs', adminAuthMiddleware, async (c) => {
 // ============================================================
 
 // List admin users
-app.get('/api/admin/users', adminAuthMiddleware, async (c) => {
+app.get('/api/admin/users', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const admins = await adminAuthService.listAdminUsers(c.env);
 
   return c.json({
@@ -299,7 +344,7 @@ app.get('/api/admin/users', adminAuthMiddleware, async (c) => {
 });
 
 // Create admin user
-app.post('/api/admin/users', adminAuthMiddleware, async (c) => {
+app.post('/api/admin/users', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const body = await c.req.json();
 
   const admin = await adminAuthService.createAdminUser(c.env, {
@@ -322,7 +367,7 @@ app.post('/api/admin/users', adminAuthMiddleware, async (c) => {
 });
 
 // Update admin user
-app.put('/api/admin/users/:id', adminAuthMiddleware, async (c) => {
+app.put('/api/admin/users/:id', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
 
@@ -371,7 +416,7 @@ app.post('/api/admin/users/:id/change-password', adminAuthMiddleware, async (c) 
 });
 
 // Delete admin user
-app.delete('/api/admin/users/:id', adminAuthMiddleware, async (c) => {
+app.delete('/api/admin/users/:id', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const id = c.req.param('id');
   const currentAdmin = c.get('admin');
 
@@ -757,7 +802,7 @@ app.post('/api/admin/projects/:projectId/import-supabase', adminAuthMiddleware, 
 // ============================================================
 
 // List OAuth providers for a project
-app.get('/api/admin/projects/:projectId/oauth', adminAuthMiddleware, async (c) => {
+app.get('/api/admin/projects/:projectId/oauth', adminAuthMiddleware, requireRole('super_admin', 'admin'), async (c) => {
   const projectId = c.req.param('projectId');
 
   const providers = await oauthService.listProviders(c.env, projectId);
@@ -769,7 +814,7 @@ app.get('/api/admin/projects/:projectId/oauth', adminAuthMiddleware, async (c) =
 });
 
 // Update OAuth provider
-app.put('/api/admin/projects/:projectId/oauth/:providerId', adminAuthMiddleware, async (c) => {
+app.put('/api/admin/projects/:projectId/oauth/:providerId', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const projectId = c.req.param('projectId');
   const providerId = c.req.param('providerId');
   const body = await c.req.json();
@@ -784,7 +829,7 @@ app.put('/api/admin/projects/:projectId/oauth/:providerId', adminAuthMiddleware,
 });
 
 // Delete OAuth provider
-app.delete('/api/admin/projects/:projectId/oauth/:providerId', adminAuthMiddleware, async (c) => {
+app.delete('/api/admin/projects/:projectId/oauth/:providerId', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const projectId = c.req.param('projectId');
   const providerId = c.req.param('providerId');
 
@@ -800,13 +845,13 @@ app.delete('/api/admin/projects/:projectId/oauth/:providerId', adminAuthMiddlewa
 // SETTINGS ROUTES
 // ============================================================
 
-app.get('/api/admin/settings', adminAuthMiddleware, async (c) => {
+app.get('/api/admin/settings', adminAuthMiddleware, requireRole('super_admin', 'admin'), async (c) => {
   const settingsService = new SystemSettingsService(c.env.DB);
   const settings = await settingsService.getSettings();
   return c.json({ success: true, data: settings });
 });
 
-app.put('/api/admin/settings', adminAuthMiddleware, async (c) => {
+app.put('/api/admin/settings', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const body = await c.req.json();
   const settingsService = new SystemSettingsService(c.env.DB);
 
@@ -822,13 +867,13 @@ app.put('/api/admin/settings', adminAuthMiddleware, async (c) => {
 // EMAIL PROVIDER ROUTES
 // ============================================================
 
-app.get('/api/admin/email-providers', adminAuthMiddleware, async (c) => {
+app.get('/api/admin/email-providers', adminAuthMiddleware, requireRole('super_admin', 'admin'), async (c) => {
   const providerService = new EmailProviderService(c.env.DB);
   const providers = await providerService.getProviders();
   return c.json({ success: true, data: providers });
 });
 
-app.post('/api/admin/email-providers', adminAuthMiddleware, async (c) => {
+app.post('/api/admin/email-providers', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const body = await c.req.json();
   const providerService = new EmailProviderService(c.env.DB);
 
@@ -841,7 +886,7 @@ app.post('/api/admin/email-providers', adminAuthMiddleware, async (c) => {
   return c.json({ success: true, data: provider, message: 'Email provider created' });
 });
 
-app.put('/api/admin/email-providers/:id', adminAuthMiddleware, async (c) => {
+app.put('/api/admin/email-providers/:id', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
   const providerService = new EmailProviderService(c.env.DB);
@@ -850,7 +895,7 @@ app.put('/api/admin/email-providers/:id', adminAuthMiddleware, async (c) => {
   return c.json({ success: true, data: provider, message: 'Email provider updated' });
 });
 
-app.delete('/api/admin/email-providers/:id', adminAuthMiddleware, async (c) => {
+app.delete('/api/admin/email-providers/:id', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const id = c.req.param('id');
   const providerService = new EmailProviderService(c.env.DB);
 
@@ -862,20 +907,20 @@ app.delete('/api/admin/email-providers/:id', adminAuthMiddleware, async (c) => {
 // EMAIL TEMPLATE ROUTES
 // ============================================================
 
-app.get('/api/admin/email-templates', adminAuthMiddleware, async (c) => {
+app.get('/api/admin/email-templates', adminAuthMiddleware, requireRole('super_admin', 'admin'), async (c) => {
   const templateService = new EmailTemplateService(c.env.DB);
   const templates = await templateService.getSystemTemplates();
   return c.json({ success: true, data: templates });
 });
 
-app.get('/api/admin/projects/:projectId/email-templates', adminAuthMiddleware, async (c) => {
+app.get('/api/admin/projects/:projectId/email-templates', adminAuthMiddleware, requireRole('super_admin', 'admin'), async (c) => {
   const projectId = c.req.param('projectId');
   const templateService = new EmailTemplateService(c.env.DB);
   const templates = await templateService.getProjectTemplates(projectId);
   return c.json({ success: true, data: templates });
 });
 
-app.put('/api/admin/email-templates/:type', adminAuthMiddleware, async (c) => {
+app.put('/api/admin/email-templates/:type', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const type = c.req.param('type') as any;
   const body = await c.req.json();
   const templateService = new EmailTemplateService(c.env.DB);
@@ -884,7 +929,7 @@ app.put('/api/admin/email-templates/:type', adminAuthMiddleware, async (c) => {
   return c.json({ success: true, data: template, message: 'Template updated' });
 });
 
-app.put('/api/admin/projects/:projectId/email-templates/:type', adminAuthMiddleware, async (c) => {
+app.put('/api/admin/projects/:projectId/email-templates/:type', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const projectId = c.req.param('projectId');
   const type = c.req.param('type') as any;
   const body = await c.req.json();
@@ -894,7 +939,7 @@ app.put('/api/admin/projects/:projectId/email-templates/:type', adminAuthMiddlew
   return c.json({ success: true, data: template, message: 'Template updated' });
 });
 
-app.delete('/api/admin/projects/:projectId/email-templates/:id', adminAuthMiddleware, async (c) => {
+app.delete('/api/admin/projects/:projectId/email-templates/:id', adminAuthMiddleware, requireRole('super_admin'), async (c) => {
   const id = c.req.param('id');
   const templateService = new EmailTemplateService(c.env.DB);
 
@@ -1265,14 +1310,13 @@ app.get('/api/auth/:projectId/oauth/:provider', async (c) => {
   const projectId = c.req.param('projectId');
   const provider = c.req.param('provider');
   const redirectUri = c.req.query('redirect_uri') || '';
-  const state = c.req.query('state') || crypto.randomUUID();
-
-  const authUrl = await oauthService.getAuthUrl(c.env, projectId, provider, redirectUri, state);
-
-  return c.json({
-    success: true,
-    data: { authUrl, state },
-  });
+  let browserSession = cookieValue(c.req.raw, 'oauth_session');
+  if (!browserSession) {
+    browserSession = crypto.randomUUID();
+    c.header('Set-Cookie', `oauth_session=${encodeURIComponent(browserSession)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
+  }
+  const result = await oauthService.startAuthorization(c.env, projectId, provider, redirectUri, browserSession);
+  return c.json({ success: true, data: result });
 });
 
 // OAuth callback
@@ -1280,22 +1324,17 @@ app.get('/api/auth/:projectId/oauth/:provider/callback', async (c) => {
   const projectId = c.req.param('projectId');
   const provider = c.req.param('provider');
   const code = c.req.query('code');
+  const state = c.req.query('state');
   const redirectUri = c.req.query('redirect_uri') || '';
-
-  if (!code) {
-    return c.json({ success: false, error: 'Authorization code required' }, 400);
-  }
-
-  const result = await oauthService.handleCallback(c.env, projectId, provider, code, redirectUri);
-
+  const browserSession = cookieValue(c.req.raw, 'oauth_session');
+  if (!code || !state || !browserSession) return c.json({ success: false, error: 'Authorization code, state, and browser session are required' }, 400);
+  const codeVerifier = await oauthService.consumeAuthorization(c.env, projectId, provider, redirectUri, state, browserSession);
+  const result = await oauthService.handleCallback(c.env, projectId, provider, code, redirectUri, codeVerifier);
+  c.header('Set-Cookie', 'oauth_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
   return c.json({
     success: true,
     data: {
-      user: {
-        id: result.user.id,
-        email: result.user.email,
-        displayName: result.user.displayName,
-      },
+      user: { id: result.user.id, email: result.user.email, displayName: result.user.displayName },
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
     },

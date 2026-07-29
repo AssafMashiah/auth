@@ -5,8 +5,10 @@ import type { Env, OAuthProvider, CreateOAuthProviderData } from '../types';
 import { projectService } from './project-service';
 import { userService } from './user-service';
 import { jwtService } from './jwt-service';
+import { authService } from './auth-service';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import { encrypt, decrypt } from '../utils/crypto';
+import { generateOAuthState, generatePkcePair, isAllowedRedirectUri } from '../utils/oauth-security';
 
 /**
  * OAuth Service - Handles OAuth provider configuration and flows
@@ -121,7 +123,8 @@ export class OAuthService {
     projectId: string,
     providerName: string,
     redirectUri: string,
-    state: string
+    state: string,
+    codeChallenge?: string
   ): Promise<string> {
     const provider = await this.getProvider(env, projectId, providerName);
     if (!provider.enabled) {
@@ -138,8 +141,34 @@ export class OAuthService {
       scope: scopeString,
       state,
     });
+    if (codeChallenge) {
+      params.set('code_challenge', codeChallenge);
+      params.set('code_challenge_method', 'S256');
+    }
 
     return `${provider.authorizationUrl}?${params.toString()}`;
+  }
+
+  async startAuthorization(env: Env, projectId: string, providerName: string, redirectUri: string, browserSession: string): Promise<{ authUrl: string; state: string }> {
+    const project = await projectService.getProject(env, projectId);
+    if (!project || !isAllowedRedirectUri(redirectUri, project.redirectUrls)) throw new BadRequestError('Redirect URI is not allowed');
+    const state = generateOAuthState();
+    const { codeVerifier, codeChallenge } = await generatePkcePair();
+    const browserSessionHash = await this.hashBrowserSession(browserSession);
+    await env.DB.prepare('INSERT INTO oauth_authorization_states (state, project_id, provider_name, redirect_uri, browser_session_hash, code_verifier, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(state, projectId, providerName, redirectUri, browserSessionHash, codeVerifier, new Date(Date.now() + 600_000).toISOString()).run();
+    return { authUrl: await this.getAuthUrl(env, projectId, providerName, redirectUri, state, codeChallenge), state };
+  }
+
+  async consumeAuthorization(env: Env, projectId: string, providerName: string, redirectUri: string, state: string, browserSession: string): Promise<string> {
+    const record = await env.DB.prepare('SELECT code_verifier, browser_session_hash, expires_at FROM oauth_authorization_states WHERE state = ? AND project_id = ? AND provider_name = ? AND redirect_uri = ? AND used_at IS NULL')
+      .bind(state, projectId, providerName, redirectUri).first<{ code_verifier: string; browser_session_hash: string; expires_at: string }>();
+    if (!record || new Date(record.expires_at).getTime() < Date.now() || record.browser_session_hash !== await this.hashBrowserSession(browserSession)) {
+      throw new BadRequestError('Invalid or expired OAuth state');
+    }
+    const consumed = await env.DB.prepare("UPDATE oauth_authorization_states SET used_at = CURRENT_TIMESTAMP WHERE state = ? AND used_at IS NULL").bind(state).run();
+    if ((consumed.meta?.changes || 0) !== 1) throw new BadRequestError('OAuth state has already been used');
+    return record.code_verifier;
   }
 
   /**
@@ -156,12 +185,16 @@ export class OAuthService {
     projectId: string,
     providerName: string,
     code: string,
-    redirectUri: string
+    redirectUri: string,
+    codeVerifier: string
   ): Promise<{ user: any; accessToken: string; refreshToken: string }> {
     const provider = await this.getProvider(env, projectId, providerName);
     const project = await projectService.getProject(env, projectId);
     if (!project) {
       throw new NotFoundError('Project not found');
+    }
+    if (!isAllowedRedirectUri(redirectUri, project.redirectUrls)) {
+      throw new BadRequestError('Redirect URI is not allowed');
     }
 
     // Decrypt client secret if encrypted
@@ -184,6 +217,7 @@ export class OAuthService {
         client_secret: clientSecret,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',
+        code_verifier: codeVerifier,
       }),
     });
 
@@ -238,13 +272,16 @@ export class OAuthService {
       });
     }
 
-    // Generate JWT tokens
+    // Generate the same persisted, rotating refresh token used by password login.
     const jwtAccessToken = await jwtService.generateAccessToken(project, user.id, user.email);
-    // Would need to import authService to create refresh token properly
-    // For now, return a placeholder
-    const refreshToken = 'refresh_token_placeholder';
+    const refreshToken = await authService.issueRefreshToken(env, projectId, user.id);
 
     return { user, accessToken: jwtAccessToken, refreshToken };
+  }
+
+  private async hashBrowserSession(session: string): Promise<string> {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(session));
+    return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
   }
 
   /**

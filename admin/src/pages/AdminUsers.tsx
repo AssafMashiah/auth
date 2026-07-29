@@ -27,22 +27,6 @@ export default function AdminUsers() {
       const response = await api.getAdminUsers();
       const usersList = response.data || [];
       setUsers(usersList);
-
-      // Check for forced setup
-      const requiresSetup =
-        localStorage.getItem("admin_requires_setup") === "true";
-      if (requiresSetup) {
-        // Find current user (assuming it's admin@example.com based on flag)
-        // Or we should verify against current logged in user email if possible,
-        // but checking admin@example.com is safe enough for the specific requirement.
-        const defaultAdmin = usersList.find(
-          (u) => u.email === "admin@example.com",
-        );
-        if (defaultAdmin) {
-          setEditingUser(defaultAdmin);
-          // Optional: Show a toast or notification explaining why
-        }
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load admin users');
     } finally {
@@ -351,10 +335,7 @@ function EditAdminModal({ user, onClose, onSuccess }: EditAdminModalProps) {
 
       await api.updateAdminUser(user.id, updates);
 
-      // If this was the forced setup for admin@example.com, clear the flag if email changed
-      if (user.email === "admin@example.com" && email !== "admin@example.com") {
-        localStorage.removeItem("admin_requires_setup");
-      }
+
 
       // Check if updating current user to update local state and UI
       const currentUserStr = localStorage.getItem('admin_user');

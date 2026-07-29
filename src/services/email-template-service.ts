@@ -1,5 +1,6 @@
 import { D1Database } from '@cloudflare/workers-types';
 import { EmailTemplate, EmailTemplateType } from '../types';
+import { sanitizeEmailTemplateHtml } from '../utils/html-sanitizer';
 
 export class EmailTemplateService {
   constructor(private db: D1Database) {}
@@ -24,6 +25,7 @@ export class EmailTemplateService {
   }
 
   async createOrUpdateTemplate(projectId: string | null, type: EmailTemplateType, data: { subject: string; bodyHtml: string; bodyText?: string }): Promise<EmailTemplate> {
+    const sanitizedHtml = sanitizeEmailTemplateHtml(data.bodyHtml);
     const existing = projectId 
       ? await this.db.prepare('SELECT id FROM email_templates WHERE project_id = ? AND type = ?').bind(projectId, type).first()
       : await this.db.prepare('SELECT id FROM email_templates WHERE project_id IS NULL AND type = ?').bind(type).first();
@@ -33,14 +35,14 @@ export class EmailTemplateService {
         `UPDATE email_templates 
          SET subject = ?, body_html = ?, body_text = ?, updated_at = CURRENT_TIMESTAMP 
          WHERE id = ?`
-      ).bind(data.subject, data.bodyHtml, data.bodyText || null, existing.id).run();
+      ).bind(data.subject, sanitizedHtml, data.bodyText || null, existing.id).run();
       return this.getTemplate(projectId, type) as Promise<EmailTemplate>;
     } else {
       const id = crypto.randomUUID();
       await this.db.prepare(
         `INSERT INTO email_templates (id, project_id, type, subject, body_html, body_text)
          VALUES (?, ?, ?, ?, ?, ?)`
-      ).bind(id, projectId, type, data.subject, data.bodyHtml, data.bodyText || null).run();
+      ).bind(id, projectId, type, data.subject, sanitizedHtml, data.bodyText || null).run();
       return this.getTemplate(projectId, type) as Promise<EmailTemplate>;
     }
   }

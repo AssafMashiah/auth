@@ -87,7 +87,7 @@ describe('Admin Auth Integration Tests', () => {
 
   describe('Admin User Management', () => {
     it('should create admin user', () => {
-      const admin = { id: 'admin-123', email: 'admin@example.com', role: 'admin' };
+      const admin = { id: 'admin-123', email: 'owner@example.com', role: 'admin' };
       expect(admin.role).toBe('admin');
     });
 

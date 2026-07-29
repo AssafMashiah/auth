@@ -50,18 +50,7 @@ export default function Dashboard({ onLogout, onThemeChange }: DashboardProps) {
       );
   }, []);
 
-  const [showSetupBanner, setShowSetupBanner] = useState(false);
 
-  useEffect(() => {
-    const requiresSetup =
-      localStorage.getItem("admin_requires_setup") === "true";
-    setShowSetupBanner(requiresSetup);
-  }, [location.pathname]);
-
-  const dismissSetupBanner = () => {
-    localStorage.removeItem("admin_requires_setup");
-    setShowSetupBanner(false);
-  };
 
   const handleLogout = async () => {
     try {
@@ -283,38 +272,6 @@ export default function Dashboard({ onLogout, onThemeChange }: DashboardProps) {
 
         {/* Page Content */}
         <main className="flex-1 p-8 overflow-auto bg-page">
-          {showSetupBanner && (
-            <div
-              role="alert"
-              data-testid="admin-setup-banner"
-              className="mb-6 flex items-start justify-between gap-4 rounded-md border border-warning/30 bg-warning-bg px-4 py-3 text-sm text-warning-text"
-            >
-              <div>
-                <strong className="font-semibold">
-                  Please update the default admin credentials.
-                </strong>{" "}
-                The default admin account is still using seeded credentials and
-                must be changed before this installation is safe to expose.
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => navigate("/dashboard/admin-users")}
-                  className="rounded bg-warning px-3 py-1 text-xs font-medium text-warning-text hover:opacity-90"
-                >
-                  Update Now
-                </button>
-                <button
-                  type="button"
-                  onClick={dismissSetupBanner}
-                  className="rounded px-2 py-1 text-xs font-medium text-warning-text hover:bg-warning/20"
-                  aria-label="Dismiss setup banner"
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          )}
           <Outlet context={{ onThemeChange }} />
         </main>
       </div>

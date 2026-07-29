@@ -373,15 +373,6 @@ BEGIN
 END;
 
 -- ============================================================
--- SEED DATA
--- ============================================================
-
--- Default Admin User (Password: admin123)
-INSERT INTO admin_users (email, password_hash, display_name, role, enabled)
-VALUES ('admin@example.com', '$2a$10$9l9XZkcXRcPh6RFjivEhoepD10a7HTeUUqZArN.lh1NZmUQfap6/q', 'Admin User', 'super_admin', 1)
-ON CONFLICT(email) DO NOTHING;
-
--- ============================================================
 -- SYSTEM SETTINGS TABLE
 -- ============================================================
 

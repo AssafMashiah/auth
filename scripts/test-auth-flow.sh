@@ -4,6 +4,8 @@
 # Tests the complete authentication flow
 
 BASE_URL="http://localhost:8787"
+ADMIN_EMAIL="${ADMIN_EMAIL:?Set ADMIN_EMAIL for an existing admin}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:?Set ADMIN_PASSWORD for that admin}"
 ADMIN_SESSION=""
 PROJECT_ID=""
 ACCESS_TOKEN=""
@@ -28,22 +30,13 @@ print_status() {
     fi
 }
 
-# 1. First, we need to create an admin user manually in the database
-echo "📝 Step 1: Admin user already created!"
-echo "   Email: admin@example.com"
-echo "   Password: Admin123!"
+# 1. Test Admin Login
 echo ""
-
-# 2. Test Admin Login
-echo ""
-echo "🔐 Step 2: Testing Admin Login..."
+echo "🔐 Step 1: Testing Admin Login..."
 ADMIN_LOGIN_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
     "$BASE_URL/api/admin/login" \
     -H "Content-Type: application/json" \
-    -d '{
-        "email": "admin@example.com",
-        "password": "Admin123!"
-    }')
+    -d "{\"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\"}")
 
 HTTP_CODE=$(echo "$ADMIN_LOGIN_RESPONSE" | tail -n1)
 RESPONSE_BODY=$(echo "$ADMIN_LOGIN_RESPONSE" | head -n-1)
