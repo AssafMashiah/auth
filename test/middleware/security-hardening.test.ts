@@ -15,7 +15,7 @@ function createContext(origin: string | undefined, env: Record<string, string | 
       path: '/api/admin/users',
     },
     header: (name: string, value: string) => headers.set(name, value),
-    text: vi.fn().mockReturnValue(new Response(null, { status: 204 })),
+    body: vi.fn().mockReturnValue(new Response(null, { status: 204 })),
     headers,
   };
 }

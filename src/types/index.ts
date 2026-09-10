@@ -8,6 +8,7 @@ export interface Env {
   AUTH_BOOTSTRAP_SECRET?: string;
   ENCRYPTION_KEY?: string;
   ADMIN_DOMAIN?: string;
+  CLIENT_ORIGINS?: string; // Comma-separated exact-match origins allowed to call /api/auth/* with credentials (e.g. tenant web apps). Separate from ADMIN_DOMAIN.
   SENDGRID_API_KEY?: string;
   SENDGRID_FROM_EMAIL?: string;
   SENDGRID_TEMPLATE_CONFIRMATION?: string;

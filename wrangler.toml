@@ -48,6 +48,21 @@ name = "EMAIL"
 #   Set with: wrangler secret put CF_API_TOKEN
 #   (Can be overridden per-provider via the admin dashboard)
 #
+# NON-SECRET VARS (configure via [vars] in this file, or `wrangler deploy --var`):
+# - ADMIN_DOMAIN: Comma-separated origins allowed to call /api/admin/* with
+#   credentials (e.g. the admin UI origin). Used by corsMiddleware.
+# - CLIENT_ORIGINS: Comma-separated origins allowed to call /api/auth/* with
+#   credentials (tenant web apps, marketing sites). Separate from ADMIN_DOMAIN
+#   so client allowlisting never grants CORS-based access to admin APIs - those
+#   remain gated by adminAuthMiddleware (session cookie + CSRF). Origins are
+#   matched exactly (scheme + host + port); no wildcards or subdomain globs.
+#
+#   Required clients for the Sharp Thought tenant:
+#     https://service.sharpthought.app,https://admin.sharpthought.app,https://www.sharpthought.app
+#   Set with (example):
+#     [vars]
+#     CLIENT_ORIGINS = "https://service.sharpthought.app,https://admin.sharpthought.app,https://www.sharpthought.app"
+#
 
 [observability]
 enabled = true
