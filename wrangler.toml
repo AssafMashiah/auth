@@ -64,5 +64,12 @@ name = "EMAIL"
 #     CLIENT_ORIGINS = "https://service.sharpthought.app,https://admin.sharpthought.app,https://www.sharpthought.app"
 #
 
+[vars]
+# Approved Sharp Thought client origins (comma-separated, exact-match).
+# These are the only origins permitted to call /api/auth/* with credentials.
+# ADMIN_DOMAIN is intentionally not pinned here - it is per-environment and
+# stays in [env.production]/[env.dev] blocks (or as a secret).
+CLIENT_ORIGINS = "https://service.sharpthought.app,https://admin.sharpthought.app,https://www.sharpthought.app"
+
 [observability]
 enabled = true
