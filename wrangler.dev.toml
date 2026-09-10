@@ -29,5 +29,12 @@ name = "EMAIL"
 # Secrets (set these via wrangler secret put <SECRET_NAME> --env dev)
 # Same secrets needed as production but with different values for dev.
 
+# Approved Sharp Thought client origins for the dev environment.
+# Mirrors wrangler.toml so future dev deploys do not silently drop the
+# actual user origin (https://web.sharpthought.app). See
+# test/config/client-origins-config.test.ts for the regression guard.
+[vars]
+CLIENT_ORIGINS = "https://service.sharpthought.app,https://web.sharpthought.app,https://admin.sharpthought.app,https://www.sharpthought.app"
+
 [observability]
 enabled = true

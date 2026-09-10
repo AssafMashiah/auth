@@ -58,10 +58,10 @@ name = "EMAIL"
 #   matched exactly (scheme + host + port); no wildcards or subdomain globs.
 #
 #   Required clients for the Sharp Thought tenant:
-#     https://service.sharpthought.app,https://admin.sharpthought.app,https://www.sharpthought.app
+#     https://service.sharpthought.app,https://web.sharpthought.app,https://admin.sharpthought.app,https://www.sharpthought.app
 #   Set with (example):
 #     [vars]
-#     CLIENT_ORIGINS = "https://service.sharpthought.app,https://admin.sharpthought.app,https://www.sharpthought.app"
+#     CLIENT_ORIGINS = "https://service.sharpthought.app,https://web.sharpthought.app,https://admin.sharpthought.app,https://www.sharpthought.app"
 #
 
 [vars]
@@ -69,7 +69,12 @@ name = "EMAIL"
 # These are the only origins permitted to call /api/auth/* with credentials.
 # ADMIN_DOMAIN is intentionally not pinned here - it is per-environment and
 # stays in [env.production]/[env.dev] blocks (or as a secret).
-CLIENT_ORIGINS = "https://service.sharpthought.app,https://admin.sharpthought.app,https://www.sharpthought.app"
+#
+# All four production tenant origins (service, web, admin, www) MUST be pinned
+# here so future deploys do not silently drop the actual user origin
+# (https://web.sharpthought.app). See test/config/client-origins-config.test.ts
+# for the regression guard.
+CLIENT_ORIGINS = "https://service.sharpthought.app,https://web.sharpthought.app,https://admin.sharpthought.app,https://www.sharpthought.app"
 
 [observability]
 enabled = true
