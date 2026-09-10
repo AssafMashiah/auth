@@ -7,6 +7,10 @@ type HeadersMap = Map<string, string>;
 
 function createContext(origin: string | undefined, env: Record<string, string | undefined>) {
   const headers: HeadersMap = new Map();
+  // Real Hono exposes c.res lazily. The unit mock mirrors the response
+  // headers via a Headers instance so middleware that needs to merge Vary
+  // (instead of overwriting it) can read what previous middleware set.
+  const resHeaders = new Headers();
   return {
     env,
     req: {
@@ -14,9 +18,15 @@ function createContext(origin: string | undefined, env: Record<string, string | 
       method: 'OPTIONS',
       path: '/api/admin/users',
     },
-    header: (name: string, value: string) => headers.set(name, value),
+    header: (name: string, value: string) => {
+      headers.set(name, value);
+      resHeaders.set(name, value);
+    },
+    body: (_data: unknown, status: number) =>
+      new Response(null, { status, headers: resHeaders }),
     text: vi.fn().mockReturnValue(new Response(null, { status: 204 })),
     headers,
+    res: { headers: resHeaders },
   };
 }
 
