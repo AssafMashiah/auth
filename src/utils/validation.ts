@@ -222,3 +222,11 @@ export function isValidEmail(email: string): boolean {
 export function sanitizeProjectName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
 }
+export const appleSignInSchema = z.object({
+  identityToken: z.string().min(20).max(10000),
+  authorizationCode: z.string().max(2000).optional(),
+  fullName: z
+    .object({ givenName: z.string().max(200).optional().nullable(), familyName: z.string().max(200).optional().nullable() })
+    .optional()
+    .nullable(),
+});

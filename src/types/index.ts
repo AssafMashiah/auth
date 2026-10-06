@@ -18,6 +18,7 @@ export interface Env {
   EMAIL_CONFIRMATION_BASE_URL?: string;
   CF_ACCOUNT_ID?: string;
   CF_API_TOKEN?: string;
+  APPLE_AUDIENCES?: string; // JSON: { "<projectId>": ["<bundle id>", ...] } for native Sign in with Apple
 }
 
 export interface SystemSettings {

@@ -249,6 +249,18 @@ export class UserService {
       fields.push('phone_verified = ?');
       values.push(updates.phoneVerified ? 1 : 0);
     }
+    if (updates.oauthProvider !== undefined) {
+      fields.push('oauth_provider = ?');
+      values.push(updates.oauthProvider);
+    }
+    if (updates.oauthProviderUserId !== undefined) {
+      fields.push('oauth_provider_user_id = ?');
+      values.push(updates.oauthProviderUserId);
+    }
+    if (updates.oauthRawUserData !== undefined) {
+      fields.push('oauth_raw_user_data = ?');
+      values.push(updates.oauthRawUserData);
+    }
 
     if (fields.length === 0) {
       throw new Error('No fields to update');
