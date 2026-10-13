@@ -90,9 +90,9 @@ describe('Audit Service Integration Tests', () => {
       expect(eventType).toBe('password_reset_requested');
     });
 
-    it('should support password_reset_confirm event', () => {
-      const eventType = 'password_reset_confirm';
-      expect(eventType).toBe('password_reset_confirm');
+    it('should support password_reset_completed event', () => {
+      const eventType = 'password_reset_completed';
+      expect(eventType).toBe('password_reset_completed');
     });
   });
 

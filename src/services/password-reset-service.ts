@@ -132,7 +132,7 @@ export class PasswordResetService {
 
     await auditService.logEvent(env, {
       projectId,
-      eventType: 'password_reset_confirm',
+      eventType: 'password_reset_completed',
       eventStatus: 'success',
       userId,
       eventData: { email, method: 'reset_token' },

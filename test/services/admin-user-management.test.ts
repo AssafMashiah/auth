@@ -441,9 +441,10 @@ describe('changeUserStatus (A3)', () => {
       env,
       expect.objectContaining({
         projectId: 'proj-1',
-        eventType: 'user_status_changed',
+        eventType: 'admin_action',
         userId: 'user-1',
         eventData: expect.objectContaining({
+          action: 'user_status_changed',
           from: 'active',
           to: 'suspended',
           reason: 'policy violation',
@@ -633,7 +634,7 @@ describe('initiateAdminPasswordReset (A4)', () => {
     expect(result).not.toHaveProperty('url');
   });
 
-  it('writes admin_initiated_password_reset audit log with targetUserId', async () => {
+  it('writes a password_reset_requested audit log marked as admin-initiated, with targetUserId', async () => {
     const mockDB = env.DB as any;
     mockDB.prepare.mockReturnValue({
       bind: vi.fn().mockReturnValue({
@@ -651,10 +652,10 @@ describe('initiateAdminPasswordReset (A4)', () => {
       env,
       expect.objectContaining({
         projectId: 'proj-1',
-        eventType: 'admin_initiated_password_reset',
+        eventType: 'password_reset_requested',
         adminUserId: 'admin-7',
         userId: 'user-1',
-        eventData: expect.objectContaining({ targetUserId: 'user-1' }),
+        eventData: expect.objectContaining({ targetUserId: 'user-1', initiatedBy: 'admin' }),
       })
     );
   });

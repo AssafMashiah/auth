@@ -1218,15 +1218,7 @@ app.post('/api/auth/:projectId/reset-password', async (c) => {
       data.newPassword
     );
 
-    // Log audit event
-    await auditService.logEvent(c.env, {
-      projectId,
-      eventType: 'password_reset_completed',
-      eventStatus: 'success',
-      ipAddress,
-      userAgent,
-    });
-
+    // The service records the successful reset with the user; only failures are recorded here.
     return c.json({
       success: true,
       message: 'Password has been reset successfully',

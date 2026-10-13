@@ -127,10 +127,12 @@ export async function changeUserStatus(
 
   await auditService.logEvent(env, {
     projectId,
-    eventType: 'user_status_changed',
+    // audit_logs only accepts listed event types; a status change is an admin action with the change in its data.
+    eventType: 'admin_action',
     eventStatus: 'success',
     userId,
     eventData: {
+      action: 'user_status_changed',
       from: previous.status,
       to: args.status,
       reason: args.reason ?? null,
@@ -189,13 +191,13 @@ export async function initiateAdminPasswordReset(
 
   await auditService.logEvent(env, {
     projectId,
-    eventType: 'admin_initiated_password_reset',
+    eventType: 'password_reset_requested',
     eventStatus: 'success',
     userId: user.id,
     adminUserId: meta.adminUserId,
     ipAddress: meta.ipAddress ?? undefined,
     userAgent: meta.userAgent ?? undefined,
-    eventData: { targetUserId: user.id },
+    eventData: { targetUserId: user.id, initiatedBy: 'admin' },
   });
 
   return { message: 'Reset email sent' };
