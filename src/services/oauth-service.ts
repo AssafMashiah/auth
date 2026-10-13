@@ -251,26 +251,46 @@ export class OAuthService {
     // Check if user exists with this OAuth identity
     let user = await userService.getUserByOAuth(env, project.userTableName, providerName, providerId);
 
+    // Google reports `verified_email` (v2 userinfo) or `email_verified` (OpenID). Only a provider-verified email may
+    // reach an existing account, the same rule as Sign in with Apple.
+    const emailVerified = userInfo.verified_email === true || userInfo.email_verified === true;
+
     if (!user) {
       // Check if user exists with this email
       user = await userService.getUserByEmail(env, project.userTableName, email);
 
       if (user) {
-        // Link OAuth to existing user (simplified - would need more logic in production)
-        // For now, just return error
-        throw new BadRequestError('Email already registered. Please login with password first.');
+        if (!emailVerified) {
+          throw new BadRequestError('Email already registered. Please login with password first.');
+        }
+        if (user.oauthProvider && user.oauthProvider !== providerName) {
+          throw new BadRequestError('This email signs in another way. Use that method.');
+        }
+        // Link this sign-in to the existing account. If its email was never confirmed, someone else may have
+        // registered it, so its password and sessions end; the mailbox owner can set a password again by reset.
+        const unconfirmed = !user.emailVerified;
+        user = await userService.updateUser(env, project.userTableName, user.id, {
+          oauthProvider: providerName,
+          oauthProviderUserId: providerId,
+          oauthRawUserData: JSON.stringify(userInfo),
+          emailVerified: true,
+          ...(unconfirmed ? { passwordHash: '' } : {}),
+        } as any);
+        if (unconfirmed) await authService.revokeAllUserTokens(env, projectId, user.id);
+      } else {
+        // Create new user
+        user = await userService.createUser(env, project.userTableName, {
+          email,
+          password: '', // No password for OAuth users
+          displayName,
+          oauthProvider: providerName,
+          oauthProviderUserId: providerId,
+          oauthRawUserData: JSON.stringify(userInfo),
+        });
+        if (emailVerified) user = await userService.updateUser(env, project.userTableName, user.id, { emailVerified: true } as any);
       }
-
-      // Create new user
-      user = await userService.createUser(env, project.userTableName, {
-        email,
-        password: '', // No password for OAuth users
-        displayName,
-        oauthProvider: providerName,
-        oauthProviderUserId: providerId,
-        oauthRawUserData: JSON.stringify(userInfo),
-      });
     }
+    if (user.status && user.status !== 'active') throw new BadRequestError('Account is not active');
 
     // Generate the same persisted, rotating refresh token used by password login.
     const jwtAccessToken = await jwtService.generateAccessToken(project, user.id, user.email);

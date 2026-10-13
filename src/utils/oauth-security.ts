@@ -23,8 +23,13 @@ export async function generatePkcePair(): Promise<{ codeVerifier: string; codeCh
   return { codeVerifier, codeChallenge: base64url(new Uint8Array(digest)) };
 }
 
-export function isAllowedRedirectUri(redirectUri: string, redirectUrls: string | null): boolean {
+/**
+ * Exact-match check against the project's allowed redirect URLs. projectService.getProject already parses the stored
+ * JSON into an array, so both the parsed array and the raw JSON string are accepted.
+ */
+export function isAllowedRedirectUri(redirectUri: string, redirectUrls: string | string[] | null): boolean {
   if (!redirectUri || !redirectUrls) return false;
+  if (Array.isArray(redirectUrls)) return redirectUrls.includes(redirectUri);
   try {
     const allowed = JSON.parse(redirectUrls);
     return Array.isArray(allowed) && allowed.includes(redirectUri);
