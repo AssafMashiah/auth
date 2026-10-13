@@ -23,6 +23,9 @@ describe('OAuth security helpers', () => {
   it('only accepts exact configured redirect URIs', () => {
     expect(isAllowedRedirectUri('https://app.example.com/callback', '["https://app.example.com/callback"]')).toBe(true);
     expect(isAllowedRedirectUri('https://app.example.com.evil.invalid/callback', '["https://app.example.com/callback"]')).toBe(false);
+    // getProject returns the list already parsed; that form must work too.
+    expect(isAllowedRedirectUri('https://app.example.com/callback', ['https://app.example.com/callback'])).toBe(true);
+    expect(isAllowedRedirectUri('https://app.example.com/callback/', ['https://app.example.com/callback'])).toBe(false);
   });
 
   it('signs expiring bootstrap tokens and rejects tampering', async () => {
