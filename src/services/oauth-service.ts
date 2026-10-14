@@ -222,7 +222,12 @@ export class OAuthService {
     });
 
     if (!tokenResponse.ok) {
-      throw new BadRequestError('Failed to exchange authorization code');
+      // The provider's OAuth error code (for example invalid_client for a wrong secret, invalid_grant for an expired
+      // or reused code) is the only way to tell configuration from user problems. It carries no secret or token.
+      const body = await tokenResponse.json().catch(() => ({})) as { error?: unknown };
+      const reason = typeof body.error === 'string' && /^[a-z_]{1,40}$/.test(body.error) ? body.error : `http_${tokenResponse.status}`;
+      console.error(JSON.stringify({ event: 'oauth_code_exchange_failed', projectId, provider: providerName, reason }));
+      throw new BadRequestError(`Failed to exchange authorization code (${reason})`);
     }
 
     const tokenData = await tokenResponse.json() as any;
