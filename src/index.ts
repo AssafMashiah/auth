@@ -12,6 +12,7 @@ import { adminAuthService } from './services/admin-auth-service';
 import { adminBootstrapService } from './services/admin-bootstrap-service';
 import { oauthService } from './services/oauth-service';
 import { appleService } from './services/apple-service';
+import { googleService } from './services/google-service';
 import { auditService } from './services/audit-service';
 import { userService } from './services/user-service';
 import { supabaseImportService } from './services/supabase-import-service';
@@ -35,6 +36,7 @@ import {
   registerSchema,
   loginSchema,
   appleSignInSchema,
+  googleSignInSchema,
   createProjectSchema,
   adminLoginSchema,
   validateSupabaseCredentialsSchema,
@@ -1042,6 +1044,22 @@ app.post('/api/auth/:projectId/login', async (c) => {
         email: result.user.email,
         displayName: result.user.displayName,
       },
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    },
+  });
+});
+
+// Sign in with Google: exchange a Google ID token (web or iPhone) for a session.
+app.post('/api/auth/:projectId/google', async (c) => {
+  const projectId = c.req.param('projectId');
+  const body = await parseJsonBody(c);
+  const data = validate(googleSignInSchema, body);
+  const result = await googleService.signIn(c.env, projectId, data);
+  return c.json({
+    success: true,
+    data: {
+      user: { id: result.user.id, email: result.user.email, displayName: result.user.displayName },
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
     },
