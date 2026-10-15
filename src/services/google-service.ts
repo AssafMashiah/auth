@@ -4,6 +4,9 @@ import { userService } from './user-service';
 import { jwtService } from './jwt-service';
 import { authService } from './auth-service';
 import { AuthenticationError, BadRequestError, NotFoundError } from '../utils/errors';
+import { drizzle } from 'drizzle-orm/d1';
+import { and, eq } from 'drizzle-orm';
+import { projectOAuthProviders } from '../db/schema';
 
 /**
  * Sign in with Google from a client that already holds Google's ID token.
@@ -57,6 +60,43 @@ export function googleAudiences(env: Env, projectId: string): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Every client id a project accepts: `GOOGLE_AUDIENCES`, plus the client id of
+ * the project's enabled Google provider from the admin, plus any ids listed
+ * as `audiences` in that provider's additional config (an iOS client, say).
+ */
+/** The project's Google provider as configured in the admin, or null. */
+export const googleProviderStore = {
+  async read(env: Env, projectId: string): Promise<{ clientId: string; enabled: boolean | null; additionalConfig: string | null } | null> {
+    const row = await drizzle(env.DB)
+      .select({ clientId: projectOAuthProviders.clientId, enabled: projectOAuthProviders.enabled, additionalConfig: projectOAuthProviders.additionalConfig })
+      .from(projectOAuthProviders)
+      .where(and(eq(projectOAuthProviders.projectId, projectId), eq(projectOAuthProviders.providerName, 'google')))
+      .get();
+    return row ?? null;
+  },
+};
+
+export async function projectGoogleAudiences(env: Env, projectId: string): Promise<string[]> {
+  const ids = new Set(googleAudiences(env, projectId));
+  let provider: Awaited<ReturnType<typeof googleProviderStore.read>> = null;
+  try {
+    provider = await googleProviderStore.read(env, projectId);
+  } catch {
+    // No provider table or no database: the env list alone.
+  }
+  if (provider && provider.enabled !== false) {
+    if (provider.clientId) ids.add(provider.clientId);
+    try {
+      const extra = provider.additionalConfig ? JSON.parse(provider.additionalConfig) : null;
+      if (Array.isArray(extra?.audiences)) for (const a of extra.audiences) if (typeof a === 'string' && a) ids.add(a);
+    } catch {
+      // A malformed config adds nothing.
+    }
+  }
+  return [...ids];
 }
 
 export async function verifyGoogleIdToken(
@@ -116,13 +156,13 @@ export class GoogleService {
     env: Env,
     projectId: string,
     data: { idToken: string },
-    options: { now?: number; fetchKeys?: () => Promise<{ keys: Jwk[] }> } = {},
+    options: { now?: number; fetchKeys?: () => Promise<{ keys: Jwk[] }>; audiences?: string[] } = {},
   ): Promise<{ user: any; accessToken: string; refreshToken: string }> {
     const project = await projectService.getProject(env, projectId);
     if (!project) throw new NotFoundError('Project not found');
     if (!project.enabled) throw new AuthenticationError('Project is disabled');
 
-    const audiences = googleAudiences(env, projectId);
+    const audiences = options.audiences ?? (await projectGoogleAudiences(env, projectId));
     if (!audiences.length) throw new BadRequestError('Sign in with Google is not configured for this project');
     const claims = await verifyGoogleIdToken(data.idToken, audiences, options);
 
