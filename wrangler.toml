@@ -72,6 +72,10 @@ name = "EMAIL"
 CLIENT_ORIGINS = "https://service.sharpthought.app,https://web.sharpthought.app,https://admin.sharpthought.app,https://www.sharpthought.app"
 # Native Sign in with Apple: identity-token audiences (bundle ids) per project.
 APPLE_AUDIENCES = '{"marginalia":["app.sharpthought.journal"]}'
+# Sign in with Google (POST /api/auth/:projectId/google): the Google OAuth
+# client ids whose ID tokens a project accepts, one web and one iOS client.
+# Client ids are public. Until set, the route answers "not configured".
+# GOOGLE_AUDIENCES = '{"marginalia":["<web client id>.apps.googleusercontent.com","<ios client id>.apps.googleusercontent.com"]}'
 
 [observability]
 enabled = true

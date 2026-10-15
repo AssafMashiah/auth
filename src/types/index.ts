@@ -19,6 +19,7 @@ export interface Env {
   CF_ACCOUNT_ID?: string;
   CF_API_TOKEN?: string;
   APPLE_AUDIENCES?: string; // JSON: { "<projectId>": ["<bundle id>", ...] } for native Sign in with Apple
+  GOOGLE_AUDIENCES?: string; // JSON: { "<projectId>": ["<OAuth client id>", ...] } for Sign in with Google with an ID token
 }
 
 export interface SystemSettings {
