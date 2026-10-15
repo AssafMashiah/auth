@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
-import { verifyGoogleIdToken, googleAudiences, GoogleService } from '../../src/services/google-service';
+import { verifyGoogleIdToken, googleAudiences, projectGoogleAudiences, googleProviderStore, GoogleService } from '../../src/services/google-service';
 import { projectService } from '../../src/services/project-service';
 import { userService } from '../../src/services/user-service';
 import { jwtService } from '../../src/services/jwt-service';
@@ -76,6 +76,36 @@ describe('googleAudiences', () => {
   });
 });
 
+describe('projectGoogleAudiences', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('adds the admin-configured provider client id and its extra audiences to the env list', async () => {
+    vi.spyOn(googleProviderStore, 'read').mockResolvedValue({ clientId: WEB, enabled: true, additionalConfig: JSON.stringify({ audiences: [IOS] }) });
+    const env = { GOOGLE_AUDIENCES: JSON.stringify({ marginalia: ['env-client'] }) } as Env;
+    expect(await projectGoogleAudiences(env, 'marginalia')).toEqual(['env-client', WEB, IOS]);
+  });
+
+  it('ignores a disabled provider, a malformed config and a missing table', async () => {
+    vi.spyOn(googleProviderStore, 'read').mockResolvedValueOnce({ clientId: WEB, enabled: false, additionalConfig: null });
+    expect(await projectGoogleAudiences({} as Env, 'marginalia')).toEqual([]);
+    vi.spyOn(googleProviderStore, 'read').mockResolvedValueOnce({ clientId: WEB, enabled: true, additionalConfig: '{bad' });
+    expect(await projectGoogleAudiences({} as Env, 'marginalia')).toEqual([WEB]);
+    vi.spyOn(googleProviderStore, 'read').mockRejectedValueOnce(new Error('no such table'));
+    expect(await projectGoogleAudiences({} as Env, 'marginalia')).toEqual([]);
+  });
+
+  it('signs in with a token for the admin-configured client and no env list', async () => {
+    vi.spyOn(googleProviderStore, 'read').mockResolvedValue({ clientId: WEB, enabled: true, additionalConfig: null });
+    vi.spyOn(projectService, 'getProject').mockResolvedValue({ id: 'marginalia', enabled: true, userTableName: 'users_marginalia' } as any);
+    vi.spyOn(userService, 'getUserByOAuth').mockResolvedValue({ id: 'u1', email: 'member@example.com', status: 'active' } as any);
+    vi.spyOn(userService, 'updateLastLogin').mockResolvedValue();
+    vi.spyOn(jwtService, 'generateAccessToken').mockResolvedValue('access');
+    vi.spyOn(authService, 'issueRefreshToken').mockResolvedValue('refresh');
+    const result = await new GoogleService().signIn({} as Env, 'marginalia', { idToken: await sign(claims()) }, options());
+    expect(result.accessToken).toBe('access');
+  });
+});
+
 describe('GoogleService.signIn', () => {
   const env = { GOOGLE_AUDIENCES: JSON.stringify({ marginalia: [WEB, IOS] }) } as Env;
   const project = { id: 'marginalia', enabled: true, userTableName: 'users_marginalia' };
@@ -87,6 +117,7 @@ describe('GoogleService.signIn', () => {
     vi.spyOn(userService, 'updateLastLogin').mockResolvedValue();
     vi.spyOn(jwtService, 'generateAccessToken').mockResolvedValue('access');
     vi.spyOn(authService, 'issueRefreshToken').mockResolvedValue('refresh');
+    vi.spyOn(googleProviderStore, 'read').mockResolvedValue(null);
   });
 
   it('signs in the account already linked to this Google id', async () => {
