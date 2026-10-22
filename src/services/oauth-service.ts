@@ -8,6 +8,7 @@ import { jwtService } from './jwt-service';
 import { authService } from './auth-service';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import { encrypt, decrypt } from '../utils/crypto';
+import { createOAuthProviderSchema } from '../utils/validation';
 import { generateOAuthState, generatePkcePair, isAllowedRedirectUri } from '../utils/oauth-security';
 
 /**
@@ -24,6 +25,12 @@ export class OAuthService {
     env: Env,
     data: CreateOAuthProviderData
   ): Promise<OAuthProvider> {
+    // Validate at the service boundary too: the admin configure route is an upsert.
+    // Empty endpoint strings and null are invalid; [] and {} explicitly clear
+    // scopes and additional configuration. Undefined always means omitted.
+    const parsed = createOAuthProviderSchema.safeParse(data);
+    if (!parsed.success) throw new BadRequestError('Invalid OAuth provider configuration');
+    data = { ...parsed.data, projectId: data.projectId };
     const db = drizzle(env.DB);
 
     // Verify project exists
@@ -50,6 +57,25 @@ export class OAuthService {
       )
       .get();
 
+    // Omitted fields preserve stored configuration. Recover endpoints lost by
+    // older credential updates using built-in defaults, without replacing any
+    // non-empty custom endpoint (including tenant-specific Microsoft URLs).
+    const endpoint = (incoming: string | undefined, stored: string | null | undefined, fallback: string) => {
+      if (incoming !== undefined) return incoming;
+      if (stored?.trim()) return stored;
+      return fallback || null;
+    };
+    const configuration = {
+      enabled: data.enabled ?? existing?.enabled ?? true,
+      authorizationUrl: endpoint(data.authorizationUrl, existing?.authorizationUrl, this.getDefaultAuthUrl(data.providerName)),
+      tokenUrl: endpoint(data.tokenUrl, existing?.tokenUrl, this.getDefaultTokenUrl(data.providerName)),
+      userInfoUrl: endpoint(data.userInfoUrl, existing?.userInfoUrl, this.getDefaultUserInfoUrl(data.providerName)),
+      scopes: data.scopes !== undefined ? JSON.stringify(data.scopes)
+        : existing ? existing.scopes : JSON.stringify(this.getDefaultScopes(data.providerName)),
+      additionalConfig: data.additionalConfig !== undefined ? JSON.stringify(data.additionalConfig)
+        : existing?.additionalConfig ?? null,
+    };
+
     if (existing) {
       // Update existing provider.
       // D1 does not reliably support Drizzle's .returning() clause, so we
@@ -57,14 +83,9 @@ export class OAuthService {
       await db
         .update(projectOAuthProviders)
         .set({
-          enabled: data.enabled !== undefined ? data.enabled : true,
+          ...configuration,
           clientId: data.clientId,
           clientSecret,
-          authorizationUrl: data.authorizationUrl || null,
-          tokenUrl: data.tokenUrl || null,
-          userInfoUrl: data.userInfoUrl || null,
-          scopes: data.scopes ? JSON.stringify(data.scopes) : null,
-          additionalConfig: data.additionalConfig ? JSON.stringify(data.additionalConfig) : null,
         })
         .where(eq(projectOAuthProviders.id, existing.id));
 
@@ -85,14 +106,9 @@ export class OAuthService {
       .values({
         projectId: data.projectId,
         providerName: data.providerName,
-        enabled: data.enabled !== undefined ? data.enabled : true,
+        ...configuration,
         clientId: data.clientId,
         clientSecret,
-        authorizationUrl: data.authorizationUrl || this.getDefaultAuthUrl(data.providerName),
-        tokenUrl: data.tokenUrl || this.getDefaultTokenUrl(data.providerName),
-        userInfoUrl: data.userInfoUrl || this.getDefaultUserInfoUrl(data.providerName),
-        scopes: data.scopes ? JSON.stringify(data.scopes) : JSON.stringify(this.getDefaultScopes(data.providerName)),
-        additionalConfig: data.additionalConfig ? JSON.stringify(data.additionalConfig) : null,
       });
 
     const created = await db
@@ -222,7 +238,12 @@ export class OAuthService {
     });
 
     if (!tokenResponse.ok) {
-      throw new BadRequestError('Failed to exchange authorization code');
+      // The provider's OAuth error code (for example invalid_client for a wrong secret, invalid_grant for an expired
+      // or reused code) is the only way to tell configuration from user problems. It carries no secret or token.
+      const body = await tokenResponse.json().catch(() => ({})) as { error?: unknown };
+      const reason = typeof body.error === 'string' && /^[a-z_]{1,40}$/.test(body.error) ? body.error : `http_${tokenResponse.status}`;
+      console.error(JSON.stringify({ event: 'oauth_code_exchange_failed', projectId, provider: providerName, reason }));
+      throw new BadRequestError(`Failed to exchange authorization code (${reason})`);
     }
 
     const tokenData = await tokenResponse.json() as any;

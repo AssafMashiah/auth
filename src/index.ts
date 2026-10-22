@@ -295,8 +295,8 @@ app.post('/api/admin/projects/:id/oauth', adminAuthMiddleware, requireRole('supe
   const body = await c.req.json();
 
   const provider = await oauthService.configureProvider(c.env, {
-    projectId,
     ...body,
+    projectId,
   });
 
   return c.json({
