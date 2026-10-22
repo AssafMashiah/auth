@@ -76,6 +76,9 @@ APPLE_AUDIENCES = '{"marginalia":["app.sharpthought.journal"]}'
 # client ids whose ID tokens a project accepts, one web and one iOS client.
 # Client ids are public. Until set, the route answers "not configured".
 # GOOGLE_AUDIENCES = '{"marginalia":["<web client id>.apps.googleusercontent.com","<ios client id>.apps.googleusercontent.com"]}'
+# ProjectMail (src/project-mail.ts): the sender each project's follow-up emails use. A project without an entry
+# cannot send them; sign-in emails keep the shared provider sender.
+PROJECT_SENDERS = '{"calisthenics_care":{"email":"hello@sharpthought.app","name":"Calisthenics Care"}}'
 
 [observability]
 enabled = true

@@ -20,6 +20,7 @@ export interface Env {
   CF_API_TOKEN?: string;
   APPLE_AUDIENCES?: string; // JSON: { "<projectId>": ["<bundle id>", ...] } for native Sign in with Apple
   GOOGLE_AUDIENCES?: string; // JSON: { "<projectId>": ["<OAuth client id>", ...] } for Sign in with Google with an ID token
+  PROJECT_SENDERS?: string; // JSON: { "<projectId>": { "email": "...", "name": "..." } }, the sender for ProjectMail sends only
 }
 
 export interface SystemSettings {
@@ -65,7 +66,9 @@ export type EmailTemplateType =
   | 'magic_link'
   | 'email_change'
   | 'otp'
-  | 'invite';
+  | 'invite'
+  | 'followup_member'
+  | 'followup_other';
 
 export interface EmailTemplate {
   id: string;

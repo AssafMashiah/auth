@@ -1374,3 +1374,4 @@ app.get('/api/auth/:projectId/oauth/:provider/callback', async (c) => {
 // ============================================================
 
 export default app;
+export { ProjectMail } from './project-mail';

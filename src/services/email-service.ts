@@ -1,4 +1,4 @@
-import type { Env, EmailProvider } from '../types';
+import type { Env, EmailProvider, EmailTemplateType } from '../types';
 import { AppError } from '../utils/errors';
 import { EmailProviderService } from './email-provider-service';
 import { EmailTemplateService } from './email-template-service';
@@ -33,6 +33,9 @@ interface WelcomeEmailData {
   project_name: string;
   extra_data?: string;
 }
+
+const escapeValues = (data: Record<string, string>) => Object.fromEntries(Object.entries(data).map(([k, v]) =>
+  [k, v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')]));
 
 /**
  * Email Service - Handles email sending via configured providers
@@ -134,7 +137,7 @@ export class EmailService {
   private async resolveTemplate(
     templateService: EmailTemplateService,
     projectId: string | undefined,
-    dbType: 'confirmation' | 'password_reset' | 'welcome'
+    dbType: EmailTemplateType
   ) {
     let template = await templateService.getTemplate(projectId || null, dbType);
     if (!template && projectId) {
@@ -260,6 +263,47 @@ export class EmailService {
        console.error('Failed to send email:', error);
        throw new AppError(500, 'Failed to send email', 'EMAIL_SEND_FAILED');
     }
+  }
+
+  /**
+   * Send one project template of any type, rendered with `data`. Used by ProjectMail; the sign-in flows keep their
+   * own methods. Provider order matches sendEmail except legacy SendGrid, which only knows the three flow templates.
+   * `sender` overrides the from address for this one message.
+   */
+  async sendProjectTemplate(
+    env: Env,
+    to: string,
+    projectId: string,
+    type: EmailTemplateType,
+    data: Record<string, string>,
+    sender?: { email: string; name?: string }
+  ): Promise<void> {
+    const providerService = new EmailProviderService(env.DB);
+    const template = await this.resolveTemplate(new EmailTemplateService(env.DB), projectId, type);
+    const message = {
+      to,
+      subject: this.renderTemplate(template.subject, data),
+      html: this.renderTemplate(template.bodyHtml, escapeValues(data)),
+      text: template.bodyText ? this.renderTemplate(template.bodyText, data) : undefined,
+    };
+
+    const provider = (await providerService.getDefaultProvider()) ?? (await providerService.getFallbackProvider());
+    if (provider) {
+      await ProviderFactory.create(provider.provider, this.buildProviderConfig(provider, env)).send({
+        ...message,
+        from: sender?.email ?? provider.fromEmail,
+        fromName: sender?.name ?? provider.fromName,
+      });
+      return;
+    }
+    if (!(env as any).EMAIL) {
+      throw new AppError(500, 'Email service not configured', 'EMAIL_SERVICE_NOT_CONFIGURED');
+    }
+    await ProviderFactory.create('cloudflare_binding', { binding: (env as any).EMAIL }).send({
+      ...message,
+      from: sender?.email ?? ((env as any).EMAIL_FROM as string | undefined) ?? this.defaultFromEmail,
+      fromName: sender?.name,
+    });
   }
 
   async sendConfirmationEmail(
