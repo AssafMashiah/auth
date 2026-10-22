@@ -51,7 +51,8 @@ export const updateProjectSchema = z.object({
 
 export const createOAuthProviderSchema = z.object({
   providerName: z.enum(["google", "github", "microsoft", "apple", "custom"]),
-  enabled: z.boolean().default(true),
+  // This schema is also used for configure/upsert: default only on INSERT.
+  enabled: z.boolean().optional(),
   clientId: z.string().min(1, "Client ID is required"),
   clientSecret: z.string().min(1, "Client Secret is required"),
   authorizationUrl: z.string().url().optional(),
