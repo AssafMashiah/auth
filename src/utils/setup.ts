@@ -435,7 +435,7 @@ END;
 CREATE TABLE IF NOT EXISTS email_templates (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     project_id TEXT REFERENCES projects(id) ON DELETE CASCADE, -- NULL for system-wide
-    type TEXT NOT NULL CHECK (type IN ('welcome', 'confirmation', 'password_reset', 'magic_link', 'email_change', 'otp', 'invite')),
+    type TEXT NOT NULL CHECK (type IN ('welcome', 'confirmation', 'password_reset', 'magic_link', 'email_change', 'otp', 'invite', 'followup_member', 'followup_other')),
     subject TEXT NOT NULL,
     body_html TEXT NOT NULL,
     body_text TEXT,
