@@ -203,7 +203,7 @@ export class OAuthService {
     code: string,
     redirectUri: string,
     codeVerifier: string
-  ): Promise<{ user: any; accessToken: string; refreshToken: string }> {
+  ): Promise<{ user: any; accessToken: string; refreshToken: string; accountCreated: boolean }> {
     const provider = await this.getProvider(env, projectId, providerName);
     const project = await projectService.getProject(env, projectId);
     if (!project) {
@@ -276,6 +276,9 @@ export class OAuthService {
     // reach an existing account, the same rule as Sign in with Apple.
     const emailVerified = userInfo.verified_email === true || userInfo.email_verified === true;
 
+    // True when this sign-in opened a new account; the app says so.
+    let accountCreated = false;
+
     if (!user) {
       // Check if user exists with this email
       user = await userService.getUserByEmail(env, project.userTableName, email);
@@ -309,6 +312,7 @@ export class OAuthService {
           oauthRawUserData: JSON.stringify(userInfo),
         });
         if (emailVerified) user = await userService.updateUser(env, project.userTableName, user.id, { emailVerified: true } as any);
+        accountCreated = true;
       }
     }
     if (user.status && user.status !== 'active') throw new BadRequestError('Account is not active');
@@ -317,7 +321,7 @@ export class OAuthService {
     const jwtAccessToken = await jwtService.generateAccessToken(project, user.id, user.email);
     const refreshToken = await authService.issueRefreshToken(env, projectId, user.id);
 
-    return { user, accessToken: jwtAccessToken, refreshToken };
+    return { user, accessToken: jwtAccessToken, refreshToken, accountCreated };
   }
 
   private async hashBrowserSession(session: string): Promise<string> {

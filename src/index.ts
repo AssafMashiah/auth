@@ -1523,6 +1523,8 @@ app.get('/api/auth/:projectId/oauth/:provider/callback', async (c) => {
       user: { id: result.user.id, email: result.user.email, displayName: result.user.displayName },
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
+      // The app says so when the sign-in opened a new account.
+      accountCreated: result.accountCreated,
     },
   });
 });
