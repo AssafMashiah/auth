@@ -325,6 +325,35 @@ export class UserService {
   }
 
   /**
+   * Remove the identity of an account and mark it deleted, keeping only the record that it existed.
+   *
+   * The name, the address, the password and the connected identity all go. The address becomes a placeholder that
+   * says nothing about the member, so re-registering the same address opens an empty account.
+   *
+   * @param env - Environment bindings
+   * @param tableName - User table name
+   * @param userId - User ID
+   */
+  async removeIdentity(
+    env: Env,
+    tableName: string,
+    userId: string
+  ): Promise<void> {
+    const safeName = sanitizeTableName(tableName);
+    const user = await this.getUserById(env, tableName, userId);
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+    await env.DB.prepare(
+      `UPDATE ${safeName}
+       SET email = ?, display_name = NULL, password_hash = NULL,
+           oauth_provider = NULL, oauth_provider_user_id = NULL, oauth_raw_user_data = NULL,
+           status = 'deleted', updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).bind(`deleted-${userId}@deleted.invalid`, userId).run();
+  }
+
+  /**
    * List users in project table.
    *
    * Pagination and search are applied at the SQL level so `total` (via

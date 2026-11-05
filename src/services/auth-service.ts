@@ -1,4 +1,4 @@
-import type { Env, RegisterData, LoginData, User, JWTPayload } from '../types';
+import type { Env, RegisterData, LoginData, User, JWTPayload, SessionSummary } from '../types';
 import { projectService } from './project-service';
 import { userService } from './user-service';
 import { jwtService } from './jwt-service';
@@ -63,7 +63,7 @@ export class AuthService {
         env,
         projectId,
         user.id,
-        { ipAddress, userAgent }
+        { ipAddress, userAgent, deviceName: data.deviceName }
       );
 
       // Record successful attempt
@@ -157,7 +157,7 @@ export class AuthService {
         env,
         projectId,
         user.id,
-        { ipAddress, userAgent }
+        { ipAddress, userAgent, deviceName: data.deviceName }
       );
 
       // Record successful attempt
@@ -334,8 +334,13 @@ export class AuthService {
   }
 
   /** Issue a persisted refresh token for a successful non-password authentication flow. */
-  async issueRefreshToken(env: Env, projectId: string, userId: string): Promise<string> {
-    return this.createRefreshToken(env, projectId, userId, {});
+  async issueRefreshToken(
+    env: Env,
+    projectId: string,
+    userId: string,
+    deviceName?: string
+  ): Promise<string> {
+    return this.createRefreshToken(env, projectId, userId, { deviceName });
   }
 
   /**
@@ -436,6 +441,101 @@ export class AuthService {
           eq(refreshTokens.revoked, false)
         )
       );
+  }
+
+  /**
+   * The sessions a member is signed in on: the devices, when each was last used and when it started.
+   *
+   * Only the sessions that are still live are returned; a revoked or expired one is gone.
+   */
+  async listSessions(
+    env: Env,
+    projectId: string,
+    userId: string
+  ): Promise<SessionSummary[]> {
+    const db = drizzle(env.DB);
+
+    const records = await db
+      .select()
+      .from(refreshTokens)
+      .where(
+        and(
+          eq(refreshTokens.projectId, projectId),
+          eq(refreshTokens.userId, userId),
+          eq(refreshTokens.revoked, false)
+        )
+      )
+      .all();
+
+    const now = Date.now();
+    return (records as unknown as SessionSummary[]).filter(
+      (session) => new Date(session.expiresAt).getTime() > now
+    );
+  }
+
+  /**
+   * End one session of a member, by its id. A session that belongs to another account is not touched.
+   */
+  async revokeSession(
+    env: Env,
+    projectId: string,
+    userId: string,
+    sessionId: string
+  ): Promise<boolean> {
+    const db = drizzle(env.DB);
+
+    const session = await db
+      .select()
+      .from(refreshTokens)
+      .where(
+        and(
+          eq(refreshTokens.projectId, projectId),
+          eq(refreshTokens.userId, userId),
+          eq(refreshTokens.id, sessionId)
+        )
+      )
+      .get();
+
+    if (!session) return false;
+
+    await this.revokeRefreshToken(env, session.id, 'ended_by_member');
+    return true;
+  }
+
+  /**
+   * End every session of a member except the one the request came from. The session that stays is named by its
+   * token; without one, every session ends.
+   *
+   * @returns How many sessions ended
+   */
+  async endOtherSessions(
+    env: Env,
+    projectId: string,
+    userId: string,
+    keepToken?: string
+  ): Promise<number> {
+    const db = drizzle(env.DB);
+    const keepHash = keepToken ? await hashToken(keepToken) : null;
+
+    const records = await db
+      .select()
+      .from(refreshTokens)
+      .where(
+        and(
+          eq(refreshTokens.projectId, projectId),
+          eq(refreshTokens.userId, userId),
+          eq(refreshTokens.revoked, false)
+        )
+      )
+      .all();
+
+    let ended = 0;
+    for (const session of records as unknown as SessionSummary[]) {
+      if (keepHash && session.tokenHash === keepHash) continue;
+      await this.revokeRefreshToken(env, session.id, 'ended_by_member');
+      ended += 1;
+    }
+    return ended;
   }
 }
 

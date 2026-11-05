@@ -86,11 +86,13 @@ export const registerSchema = z.object({
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number'),
   displayName: z.string().min(1).max(100).optional(),
+  deviceName: z.string().min(1).max(120).optional(),
 });
 
 export const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required'),
+  deviceName: z.string().min(1).max(120).optional(),
 });
 
 export const refreshTokenSchema = z.object({
@@ -225,13 +227,51 @@ export function sanitizeProjectName(name: string): string {
 }
 export const googleSignInSchema = z.object({
   idToken: z.string().min(20).max(10000),
+  deviceName: z.string().min(1).max(120).optional(),
 });
 
 export const appleSignInSchema = z.object({
   identityToken: z.string().min(20).max(10000),
   authorizationCode: z.string().max(2000).optional(),
+  deviceName: z.string().min(1).max(120).optional(),
   fullName: z
     .object({ givenName: z.string().max(200).optional().nullable(), familyName: z.string().max(200).optional().nullable() })
     .optional()
     .nullable(),
+});
+
+// ============================================================
+// ACCOUNT VALIDATION
+// ============================================================
+
+const accountPassword = z.string()
+  .min(8, 'Password must be at least 8 characters')
+  .max(72, 'Password must be at most 72 characters')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[0-9]/, 'Password must contain at least one number');
+
+/** Set a first password, or change the one there is. */
+export const setPasswordSchema = z.object({
+  newPassword: accountPassword,
+  /** Required when the account already has a password. */
+  currentPassword: z.string().min(1).max(200).optional(),
+  /** The session that stays signed in; every other session ends. */
+  keepSessionToken: z.string().min(1).max(500).optional(),
+});
+
+/** Ask for a new sign-in address. */
+export const changeEmailSchema = z.object({
+  newEmail: z.string().email('Invalid email address'),
+});
+
+/** Remove a way in from the account. */
+export const disconnectProviderSchema = z.object({
+  provider: z.enum(['google', 'apple']),
+});
+
+/** Delete the account. */
+export const deleteAccountSchema = z.object({
+  /** The password, when the account has one. */
+  password: z.string().min(1).max(200).optional(),
 });

@@ -20,6 +20,7 @@ import { passwordResetService } from './services/password-reset-service';
 import { emailService } from './services/email-service';
 import { emailConfirmationService } from './services/email-confirmation-service';
 import { rateLimitService } from './services/rate-limit-service';
+import { accountService } from './services/account-service';
 import { SystemSettingsService } from './services/system-settings-service';
 import { EmailProviderService } from './services/email-provider-service';
 import { EmailTemplateService } from './services/email-template-service';
@@ -44,7 +45,11 @@ import {
   getImportPreviewSchema,
   forgotPasswordSchema,
   completeAdminBootstrapSchema,
-  resetPasswordSchema
+  resetPasswordSchema,
+  setPasswordSchema,
+  changeEmailSchema,
+  disconnectProviderSchema,
+  deleteAccountSchema
 } from './utils/validation';
 import { getIpAddress, getUserAgent } from './utils/helpers';
 import { initializeDatabase } from './utils/setup';
@@ -1055,15 +1060,30 @@ app.post('/api/auth/:projectId/google', async (c) => {
   const projectId = c.req.param('projectId');
   const body = await parseJsonBody(c);
   const data = validate(googleSignInSchema, body);
-  const result = await googleService.signIn(c.env, projectId, data);
-  return c.json({
-    success: true,
-    data: {
-      user: { id: result.user.id, email: result.user.email, displayName: result.user.displayName },
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-    },
-  });
+  const ipAddress = getIpAddress(c.req.raw);
+
+  // The provider sign-in routes are held to the same limit as the password ones.
+  await rateLimitService.checkRateLimit(c.env, projectId, 'oauth', ipAddress);
+  try {
+    const result = await googleService.signIn(c.env, projectId, data, { deviceName: data.deviceName });
+    await rateLimitService.recordAttempt(
+      c.env, projectId, 'oauth', ipAddress, result.user.email, true, result.user.id
+    );
+    return c.json({
+      success: true,
+      data: {
+        user: { id: result.user.id, email: result.user.email, displayName: result.user.displayName },
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
+    });
+  } catch (error) {
+    await rateLimitService.recordAttempt(
+      c.env, projectId, 'oauth', ipAddress, undefined, false, undefined,
+      error instanceof Error ? error.message : 'Unknown error'
+    );
+    throw error;
+  }
 });
 
 // Native Sign in with Apple: exchange Apple's identity token for a session.
@@ -1071,15 +1091,29 @@ app.post('/api/auth/:projectId/apple', async (c) => {
   const projectId = c.req.param('projectId');
   const body = await parseJsonBody(c);
   const data = validate(appleSignInSchema, body);
-  const result = await appleService.signIn(c.env, projectId, data);
-  return c.json({
-    success: true,
-    data: {
-      user: { id: result.user.id, email: result.user.email, displayName: result.user.displayName },
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-    },
-  });
+  const ipAddress = getIpAddress(c.req.raw);
+
+  await rateLimitService.checkRateLimit(c.env, projectId, 'oauth', ipAddress);
+  try {
+    const result = await appleService.signIn(c.env, projectId, data, { deviceName: data.deviceName });
+    await rateLimitService.recordAttempt(
+      c.env, projectId, 'oauth', ipAddress, result.user.email, true, result.user.id
+    );
+    return c.json({
+      success: true,
+      data: {
+        user: { id: result.user.id, email: result.user.email, displayName: result.user.displayName },
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
+    });
+  } catch (error) {
+    await rateLimitService.recordAttempt(
+      c.env, projectId, 'oauth', ipAddress, undefined, false, undefined,
+      error instanceof Error ? error.message : 'Unknown error'
+    );
+    throw error;
+  }
 });
 
 // Get current user
@@ -1099,9 +1133,133 @@ app.get('/api/auth/:projectId/me', authMiddleware, async (c) => {
   });
 });
 
-// Refresh token
-app.post('/api/auth/:projectId/refresh', async (c) => {
+// ============================================================
+// ACCOUNT ROUTES (the member's own account)
+// ============================================================
+
+// The account, the ways in connected to it and the devices signed in to it.
+app.get('/api/auth/:projectId/account', authMiddleware, async (c) => {
+  const project = c.get('project');
+  const user = c.get('user');
+  const device = c.req.query('device');
+
+  const summary = await accountService.summary(c.env, project, user, device);
+
+  return c.json({ success: true, data: summary });
+});
+
+// Set a first password, or change the one there is. The other devices are signed out; this one stays.
+app.post('/api/auth/:projectId/account/password', authMiddleware, async (c) => {
+  const project = c.get('project');
+  const user = c.get('user');
+  const body = await parseJsonBody(c);
+  const data = validate(setPasswordSchema, body);
+
+  const result = await accountService.setPassword(c.env, project, user, data, {
+    ipAddress: getIpAddress(c.req.raw),
+    userAgent: getUserAgent(c.req.raw),
+  });
+
+  return c.json({
+    success: true,
+    data: {
+      user: { id: result.user.id, email: result.user.email, displayName: result.user.displayName },
+    },
+  });
+});
+
+// Ask for a new sign-in address. The name changes only when the link is used.
+app.post('/api/auth/:projectId/account/email', authMiddleware, async (c) => {
+  const project = c.get('project');
+  const user = c.get('user');
+  const body = await parseJsonBody(c);
+  const data = validate(changeEmailSchema, body);
+
+  const result = await accountService.requestEmailChange(c.env, project, user, data.newEmail);
+
+  return c.json({
+    success: true,
+    data: { pendingEmail: result.pendingEmail },
+    message: 'A confirmation link is on its way to the new address',
+  });
+});
+
+// Apply the change the link carries. The link is clicked in a browser, so this route needs no access token.
+app.get('/api/auth/:projectId/account/email/confirm', async (c) => {
   const projectId = c.req.param('projectId');
+  const token = c.req.query('token');
+  if (!token) throw new BadRequestError('Confirmation token required');
+
+  const result = await accountService.confirmEmailChange(c.env, projectId, token);
+
+  return c.json({
+    success: true,
+    data: { email: result.email },
+    message: 'Your address has changed',
+  });
+});
+
+// Remove a way in from the account.
+app.post('/api/auth/:projectId/account/provider/disconnect', authMiddleware, async (c) => {
+  const project = c.get('project');
+  const user = c.get('user');
+  const body = await parseJsonBody(c);
+  const data = validate(disconnectProviderSchema, body);
+
+  await accountService.disconnectProvider(c.env, project, user, data.provider);
+
+  return c.json({
+    success: true,
+    message: `${data.provider} is no longer connected to this account`,
+  });
+});
+
+// End one session: one other device.
+app.post('/api/auth/:projectId/account/sessions/:sessionId/end', authMiddleware, async (c) => {
+  const project = c.get('project');
+  const user = c.get('user');
+  const sessionId = c.req.param('sessionId');
+
+  const ended = await authService.revokeSession(c.env, project.id, user.id, sessionId);
+  if (!ended) throw new BadRequestError('That device is not signed in to this account');
+
+  return c.json({ success: true, message: 'That device is signed out' });
+});
+
+// End every session, including this one. The member signs in again.
+app.post('/api/auth/:projectId/account/sessions/end-all', authMiddleware, async (c) => {
+  const project = c.get('project');
+  const user = c.get('user');
+
+  await authService.revokeAllUserTokens(c.env, project.id, user.id);
+
+  return c.json({ success: true, message: 'Every device is signed out' });
+});
+
+// Send the confirmation message again. The address is used for nothing else.
+app.post('/api/auth/:projectId/account/confirm-email', authMiddleware, async (c) => {
+  const project = c.get('project');
+  const user = c.get('user');
+
+  await accountService.resendConfirmation(c.env, project, user);
+
+  return c.json({ success: true, message: 'The confirmation message is on its way' });
+});
+
+// Delete the account: the sign-in identity, the sessions and the cloud copy go.
+app.delete('/api/auth/:projectId/account', authMiddleware, async (c) => {
+  const project = c.get('project');
+  const user = c.get('user');
+  const body = await parseJsonBody(c);
+  const data = validate(deleteAccountSchema, body);
+
+  await accountService.deleteAccount(c.env, project, user, data);
+
+  return c.json({ success: true, message: 'The account is deleted' });
+});
+
+// Refresh token
+app.post('/api/auth/:projectId/refresh', async (c) => {  const projectId = c.req.param('projectId');
   const body = await parseJsonBody(c);
 
   const result = await authService.refreshToken(c.env, projectId, body.refreshToken);

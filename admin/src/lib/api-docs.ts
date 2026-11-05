@@ -386,6 +386,234 @@ export const apiEndpoints: APIEndpoint[] = [
     ],
   },
   {
+    method: 'GET',
+    path: '/api/auth/:projectId/account',
+    title: 'Get Account',
+    description: 'The account, the ways in connected to it and the devices signed in to it',
+    category: 'User Auth',
+    authentication: 'JWT Bearer',
+    headers: {
+      'Authorization': 'Bearer your_access_token',
+    },
+    responses: [
+      {
+        status: 200,
+        description: 'The account, its ways in and its devices',
+        example: {
+          success: true,
+          data: {
+            user: {
+              id: 'user-id',
+              email: 'user@example.com',
+              emailVerified: true,
+              displayName: 'John Doe',
+              status: 'active',
+              createdAt: '2025-11-03T00:00:00Z',
+            },
+            waysIn: [
+              { type: 'password', connected: true },
+              { type: 'google', connected: true, detail: 'user@example.com' },
+              { type: 'apple', connected: false },
+            ],
+            devices: [
+              {
+                id: 'session-id',
+                deviceName: 'John\'s iPhone',
+                userAgent: 'CalisthenicsCare/1.0',
+                lastUsedAt: '2025-11-03T00:00:00Z',
+                createdAt: '2025-11-01T00:00:00Z',
+                current: true,
+              },
+            ],
+          },
+        },
+      },
+    ],
+  },
+  {
+    method: 'POST',
+    path: '/api/auth/:projectId/account/password',
+    title: 'Set Or Change Password',
+    description: 'Set a first password on an account that has none, or change the one there is. Every other session ends; the session the request came from stays signed in.',
+    category: 'User Auth',
+    authentication: 'JWT Bearer',
+    headers: {
+      'Authorization': 'Bearer your_access_token',
+    },
+    requestBody: {
+      type: 'application/json',
+      schema: {
+        newPassword: 'string (required)',
+        currentPassword: 'string (required when the account already has a password)',
+        keepSessionToken: 'string (optional, the session that stays signed in)',
+      },
+      example: {
+        newPassword: 'NewSecurePassword123!',
+        currentPassword: 'OldSecurePassword123!',
+        keepSessionToken: 'refresh-token',
+      },
+    },
+    responses: [
+      {
+        status: 200,
+        description: 'The password is set',
+        example: {
+          success: true,
+          data: { user: { id: 'user-id', email: 'user@example.com', displayName: 'John Doe' } },
+        },
+      },
+      { status: 401, description: 'The current password is missing or not correct' },
+    ],
+  },
+  {
+    method: 'POST',
+    path: '/api/auth/:projectId/account/email',
+    title: 'Request Email Change',
+    description: 'Ask for a new sign-in address. A confirmation link goes to the new address and the old address is told. The sign-in name changes only when the link is used.',
+    category: 'User Auth',
+    authentication: 'JWT Bearer',
+    headers: {
+      'Authorization': 'Bearer your_access_token',
+    },
+    requestBody: {
+      type: 'application/json',
+      schema: { newEmail: 'string (required)' },
+      example: { newEmail: 'new@example.com' },
+    },
+    responses: [
+      {
+        status: 200,
+        description: 'The link is on its way',
+        example: {
+          success: true,
+          data: { pendingEmail: 'new@example.com' },
+          message: 'A confirmation link is on its way to the new address',
+        },
+      },
+      { status: 409, description: 'That address is already used by another account' },
+    ],
+  },
+  {
+    method: 'GET',
+    path: '/api/auth/:projectId/account/email/confirm',
+    title: 'Confirm Email Change',
+    description: 'Apply the change the link carries. The history, the plan and the backup do not move.',
+    category: 'User Auth',
+    authentication: 'None',
+    responses: [
+      {
+        status: 200,
+        description: 'The address has changed',
+        example: { success: true, data: { email: 'new@example.com' }, message: 'Your address has changed' },
+      },
+      { status: 401, description: 'The link is not valid, was already used or has expired' },
+    ],
+  },
+  {
+    method: 'POST',
+    path: '/api/auth/:projectId/account/provider/disconnect',
+    title: 'Disconnect A Way In',
+    description: 'Remove a provider identity from the account. Refused when the account has no password, because it would lock the member out.',
+    category: 'User Auth',
+    authentication: 'JWT Bearer',
+    headers: {
+      'Authorization': 'Bearer your_access_token',
+    },
+    requestBody: {
+      type: 'application/json',
+      schema: { provider: 'google | apple (required)' },
+      example: { provider: 'google' },
+    },
+    responses: [
+      {
+        status: 200,
+        description: 'The way in is removed',
+        example: { success: true, message: 'google is no longer connected to this account' },
+      },
+      { status: 400, description: 'That way in is not connected, or the account would have no way in' },
+    ],
+  },
+  {
+    method: 'POST',
+    path: '/api/auth/:projectId/account/sessions/:sessionId/end',
+    title: 'End One Session',
+    description: 'Sign one other device out',
+    category: 'User Auth',
+    authentication: 'JWT Bearer',
+    headers: {
+      'Authorization': 'Bearer your_access_token',
+    },
+    responses: [
+      {
+        status: 200,
+        description: 'That device is signed out',
+        example: { success: true, message: 'That device is signed out' },
+      },
+      { status: 400, description: 'That device is not signed in to this account' },
+    ],
+  },
+  {
+    method: 'POST',
+    path: '/api/auth/:projectId/account/sessions/end-all',
+    title: 'End Every Session',
+    description: 'Sign every device out, including this one. The member signs in again.',
+    category: 'User Auth',
+    authentication: 'JWT Bearer',
+    headers: {
+      'Authorization': 'Bearer your_access_token',
+    },
+    responses: [
+      {
+        status: 200,
+        description: 'Every device is signed out',
+        example: { success: true, message: 'Every device is signed out' },
+      },
+    ],
+  },
+  {
+    method: 'POST',
+    path: '/api/auth/:projectId/account/confirm-email',
+    title: 'Resend The Confirmation',
+    description: 'Send the address confirmation message again. The address is used for nothing else.',
+    category: 'User Auth',
+    authentication: 'JWT Bearer',
+    headers: {
+      'Authorization': 'Bearer your_access_token',
+    },
+    responses: [
+      {
+        status: 200,
+        description: 'The message is on its way',
+        example: { success: true, message: 'The confirmation message is on its way' },
+      },
+      { status: 400, description: 'This address is already confirmed' },
+    ],
+  },
+  {
+    method: 'DELETE',
+    path: '/api/auth/:projectId/account',
+    title: 'Delete The Account',
+    description: 'Delete the account: every session ends and the identity goes. A record that the account existed stays, without the name, the address, the password or the connected identity.',
+    category: 'User Auth',
+    authentication: 'JWT Bearer',
+    headers: {
+      'Authorization': 'Bearer your_access_token',
+    },
+    requestBody: {
+      type: 'application/json',
+      schema: { password: 'string (required when the account has a password)' },
+      example: { password: 'SecurePassword123!' },
+    },
+    responses: [
+      {
+        status: 200,
+        description: 'The account is deleted',
+        example: { success: true, message: 'The account is deleted' },
+      },
+      { status: 401, description: 'The password is missing or not correct' },
+    ],
+  },
+  {
     method: 'POST',
     path: '/api/auth/:projectId/forgot-password',
     title: 'Forgot Password',

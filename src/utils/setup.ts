@@ -249,6 +249,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
         'suspicious_activity', 'rate_limit_triggered', 'account_locked',
         'email_confirmation_requested', 'email_confirmed', 'email_confirmation_failed',
         'password_reset_requested', 'password_reset_completed',
+        'email_changed', 'email_change_requested',
         'supabase_import_started', 'supabase_import_completed',
         'supabase_import_failed', 'supabase_import_batch_failed'
     )),
@@ -435,7 +436,7 @@ END;
 CREATE TABLE IF NOT EXISTS email_templates (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     project_id TEXT REFERENCES projects(id) ON DELETE CASCADE, -- NULL for system-wide
-    type TEXT NOT NULL CHECK (type IN ('welcome', 'confirmation', 'password_reset', 'magic_link', 'email_change', 'otp', 'invite', 'followup_member', 'followup_other')),
+    type TEXT NOT NULL CHECK (type IN ('welcome', 'confirmation', 'password_reset', 'magic_link', 'email_change', 'otp', 'invite', 'followup_member', 'followup_other', 'email_changed')),
     subject TEXT NOT NULL,
     body_html TEXT NOT NULL,
     body_text TEXT,
@@ -459,7 +460,8 @@ INSERT OR IGNORE INTO email_templates (type, subject, body_html, body_text) VALU
 ('magic_link', 'Login to {{app_name}}', '<h1>Login</h1><p>Click <a href="{{action_url}}">here</a> to login.</p>', 'Login: {{action_url}}'),
 ('email_change', 'Verify new email', '<h1>Verify Email</h1><p>Click <a href="{{action_url}}">here</a> to verify.</p>', 'Verify Email: {{action_url}}'),
 ('otp', 'Your verification code', '<h1>Code: {{otp}}</h1>', 'Your code is: {{otp}}'),
-('invite', 'You''re invited to {{app_name}}', '<h1>You''re invited</h1><p>Click <a href="{{action_url}}">here</a> to accept your invitation.</p>', 'You''re invited to {{app_name}}. Accept: {{action_url}}');
+('invite', 'You''re invited to {{app_name}}', '<h1>You''re invited</h1><p>Click <a href="{{action_url}}">here</a> to accept your invitation.</p>', 'You''re invited to {{app_name}}. Accept: {{action_url}}'),
+('email_changed', 'Your {{app_name}} address changed', '<h1>Your address changed</h1><p>The address you sign in to {{app_name}} with is now {{new_email}}.</p><p>If this was not you, contact support.</p>', 'Your address changed. The address you sign in to {{app_name}} with is now {{new_email}}. If this was not you, contact support.');
 
 -- ============================================================
 -- ONE TIME TOKENS TABLE
