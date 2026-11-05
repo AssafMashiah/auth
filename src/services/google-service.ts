@@ -156,7 +156,7 @@ export class GoogleService {
     env: Env,
     projectId: string,
     data: { idToken: string },
-    options: { now?: number; fetchKeys?: () => Promise<{ keys: Jwk[] }>; audiences?: string[] } = {},
+    options: { now?: number; fetchKeys?: () => Promise<{ keys: Jwk[] }>; audiences?: string[]; deviceName?: string } = {},
   ): Promise<{ user: any; accessToken: string; refreshToken: string }> {
     const project = await projectService.getProject(env, projectId);
     if (!project) throw new NotFoundError('Project not found');
@@ -197,7 +197,7 @@ export class GoogleService {
 
     await userService.updateLastLogin(env, table, user.id);
     const accessToken = await jwtService.generateAccessToken(project, user.id, user.email);
-    const refreshToken = await authService.issueRefreshToken(env, projectId, user.id);
+    const refreshToken = await authService.issueRefreshToken(env, projectId, user.id, options.deviceName);
     return { user, accessToken, refreshToken };
   }
 }

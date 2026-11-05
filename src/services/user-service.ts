@@ -51,9 +51,10 @@ export class UserService {
   ): Promise<User | null> {
     const safeName = sanitizeTableName(tableName);
 
+    // The address is matched case-insensitively, so "A@x.com" and "a@x.com" are one account.
     const result = await env.DB.prepare(
-      `SELECT ${USER_COLUMNS} FROM ${safeName} WHERE email = ? AND status != 'deleted' LIMIT 1`
-    ).bind(email).first();
+      `SELECT ${USER_COLUMNS} FROM ${safeName} WHERE email = ? COLLATE NOCASE AND status != 'deleted' LIMIT 1`
+    ).bind(email.trim().toLowerCase()).first();
 
     return result as User | null;
   }
@@ -131,8 +132,8 @@ export class UserService {
 
     // Check if there's a deleted user with this email
     const deletedUser = await env.DB.prepare(
-      `SELECT 1 FROM ${safeName} WHERE email = ? AND status = 'deleted' LIMIT 1`
-    ).bind(data.email).first();
+      `SELECT 1 FROM ${safeName} WHERE email = ? COLLATE NOCASE AND status = 'deleted' LIMIT 1`
+    ).bind(data.email.trim().toLowerCase()).first();
 
     // If a deleted user exists, reactivate them instead of creating new
     if (deletedUser) {
@@ -162,7 +163,7 @@ export class UserService {
 
     const params: any[] = [
       id,
-      data.email,
+      data.email.trim().toLowerCase(),
       data.passwordHash || null,
       data.oauthProvider || null,
       data.oauthProviderUserId || null,
@@ -209,8 +210,8 @@ export class UserService {
     if (updates.email !== undefined) {
       // Check if email is already taken by another user
       const existing = await env.DB.prepare(
-        `SELECT id FROM ${safeName} WHERE email = ? AND id != ? AND status != 'deleted' LIMIT 1`
-      ).bind(updates.email, userId).first();
+        `SELECT id FROM ${safeName} WHERE email = ? COLLATE NOCASE AND id != ? AND status != 'deleted' LIMIT 1`
+      ).bind(updates.email.trim().toLowerCase(), userId).first();
 
       if (existing) {
         throw new ConflictError('Email is already taken by another user');
@@ -322,6 +323,35 @@ export class UserService {
     await env.DB.prepare(
       `UPDATE ${safeName} SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).bind(userId).run();
+  }
+
+  /**
+   * Remove the identity of an account and mark it deleted, keeping only the record that it existed.
+   *
+   * The name, the address, the password and the connected identity all go. The address becomes a placeholder that
+   * says nothing about the member, so re-registering the same address opens an empty account.
+   *
+   * @param env - Environment bindings
+   * @param tableName - User table name
+   * @param userId - User ID
+   */
+  async removeIdentity(
+    env: Env,
+    tableName: string,
+    userId: string
+  ): Promise<void> {
+    const safeName = sanitizeTableName(tableName);
+    const user = await this.getUserById(env, tableName, userId);
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+    await env.DB.prepare(
+      `UPDATE ${safeName}
+       SET email = ?, display_name = NULL, password_hash = NULL,
+           oauth_provider = NULL, oauth_provider_user_id = NULL, oauth_raw_user_data = NULL,
+           status = 'deleted', updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).bind(`deleted-${userId}@deleted.invalid`, userId).run();
   }
 
   /**

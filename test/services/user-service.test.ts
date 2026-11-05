@@ -83,7 +83,7 @@ describe('UserService', () => {
       // so the projection is allowed to grow: we just assert the table name
       // was sanitized and the WHERE clause is intact.
       expect(prepareCall).toContain('FROM testDROPTABLEusers');
-      expect(prepareCall).toContain("WHERE email = ? AND status != 'deleted' LIMIT 1");
+      expect(prepareCall).toContain("WHERE email = ? COLLATE NOCASE AND status != 'deleted' LIMIT 1");
     });
   });
 

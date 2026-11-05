@@ -298,3 +298,128 @@ DESCRIPTION: High-level system architecture overview.
  */
 ```
 ----------------------------------------
+
+----------------------------------------
+TITLE: Read The Account
+DESCRIPTION: The account, the ways in connected to it and the devices signed in to it. One person is one account, however they came in.
+```typescript
+// GET /api/auth/:projectId/account
+// Requires: Bearer access token. The optional `device` query names the device the request came from.
+const response = await fetch('https://your-worker.com/api/auth/PROJECT_ID/account?device=John%27s%20iPhone', {
+  headers: { Authorization: 'Bearer ' + accessToken },
+});
+
+const result = await response.json();
+// result: { success: true, data: {
+//   user: { id, email, emailVerified, displayName, status, createdAt },
+//   waysIn: [ { type: 'password', connected: true },
+//              { type: 'google', connected: true, detail: 'user@example.com' },
+//              { type: 'apple', connected: false } ],
+//   devices: [ { id, deviceName, userAgent, lastUsedAt, createdAt, current } ]
+// } }
+```
+----------------------------------------
+
+----------------------------------------
+TITLE: Set A First Password
+DESCRIPTION: Give a Google-only account a password, so the account has two ways in. Every other session ends; the session the request came from stays signed in.
+```typescript
+// POST /api/auth/:projectId/account/password
+// Requires: Bearer access token
+const response = await fetch('https://your-worker.com/api/auth/PROJECT_ID/account/password', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+  body: JSON.stringify({
+    newPassword: 'NewSecurePassword123!',
+    // currentPassword: required when the account already has one
+    // keepSessionToken: the refresh token of the session that stays signed in
+  }),
+});
+
+const result = await response.json();
+// result: { success: true, data: { user: { id, email, displayName } } }
+```
+----------------------------------------
+
+----------------------------------------
+TITLE: Change The Email Address
+DESCRIPTION: Step 1 of 2. Ask for a new sign-in address. The link goes to the new address and the old address is told. The sign-in name changes only when the link is used, and the history, the plan and the backup do not move.
+```typescript
+// POST /api/auth/:projectId/account/email
+// Requires: Bearer access token
+const response = await fetch('https://your-worker.com/api/auth/PROJECT_ID/account/email', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+  body: JSON.stringify({ newEmail: 'new@example.com' }),
+});
+
+const result = await response.json();
+// result: { success: true, data: { pendingEmail: 'new@example.com' } }
+```
+----------------------------------------
+
+----------------------------------------
+TITLE: Confirm The Email Address
+DESCRIPTION: Step 2 of 2. Use the token from the link to make the new address the sign-in name.
+```typescript
+// GET /api/auth/:projectId/account/email/confirm?token=TOKEN_FROM_EMAIL_URL
+// Requires: nothing; the link is clicked in a browser
+const response = await fetch(
+  'https://your-worker.com/api/auth/PROJECT_ID/account/email/confirm?token=' + encodeURIComponent(token)
+);
+
+const result = await response.json();
+// result: { success: true, data: { email: 'new@example.com' } }
+```
+----------------------------------------
+
+----------------------------------------
+TITLE: Disconnect A Way In
+DESCRIPTION: Remove a provider identity from the account. Refused when the account has no password, because it would lock the member out.
+```typescript
+// POST /api/auth/:projectId/account/provider/disconnect
+// Requires: Bearer access token
+const response = await fetch('https://your-worker.com/api/auth/PROJECT_ID/account/provider/disconnect', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+  body: JSON.stringify({ provider: 'google' }),
+});
+
+const result = await response.json();
+// result: { success: true, message: 'google is no longer connected to this account' }
+```
+----------------------------------------
+
+----------------------------------------
+TITLE: End The Sessions
+DESCRIPTION: Sign one other device out, or every device out including this one.
+```typescript
+// POST /api/auth/:projectId/account/sessions/{sessionId}/end   — one other device
+// POST /api/auth/:projectId/account/sessions/end-all             — every device
+// Requires: Bearer access token
+const response = await fetch('https://your-worker.com/api/auth/PROJECT_ID/account/sessions/end-all', {
+  method: 'POST',
+  headers: { Authorization: 'Bearer ' + accessToken },
+});
+
+const result = await response.json();
+// result: { success: true, message: 'Every device is signed out' }
+```
+----------------------------------------
+
+----------------------------------------
+TITLE: Delete The Account
+DESCRIPTION: End every session and remove the identity. A record that the account existed stays, without the name, the address, the password or the connected identity.
+```typescript
+// DELETE /api/auth/:projectId/account
+// Requires: Bearer access token, and the password when the account has one
+const response = await fetch('https://your-worker.com/api/auth/PROJECT_ID/account', {
+  method: 'DELETE',
+  headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+  body: JSON.stringify({ password: 'SecurePassword123!' }),
+});
+
+const result = await response.json();
+// result: { success: true, message: 'The account is deleted' }
+```
+----------------------------------------

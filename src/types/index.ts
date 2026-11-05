@@ -68,7 +68,8 @@ export type EmailTemplateType =
   | 'otp'
   | 'invite'
   | 'followup_member'
-  | 'followup_other';
+  | 'followup_other'
+  | 'email_changed';
 
 export interface EmailTemplate {
   id: string;
@@ -163,11 +164,29 @@ export interface RegisterData {
   email: string;
   password: string;
   displayName?: string;
+  /** The name of the device the session belongs to, shown in the account's device list. */
+  deviceName?: string;
 }
 
 export interface LoginData {
   email: string;
   password: string;
+  /** The name of the device the session belongs to, shown in the account's device list. */
+  deviceName?: string;
+}
+
+/** A live session: one device signed in to an account. */
+export interface SessionSummary {
+  id: string;
+  projectId: string;
+  userId: string;
+  tokenHash: string;
+  deviceName: string | null;
+  userAgent: string | null;
+  ipAddress: string | null;
+  expiresAt: string;
+  createdAt: string | null;
+  lastUsedAt: string | null;
 }
 
 // Admin types
