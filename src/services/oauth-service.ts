@@ -202,7 +202,8 @@ export class OAuthService {
     providerName: string,
     code: string,
     redirectUri: string,
-    codeVerifier: string
+    codeVerifier: string,
+    deviceName?: string
   ): Promise<{ user: any; accessToken: string; refreshToken: string; accountCreated: boolean }> {
     const provider = await this.getProvider(env, projectId, providerName);
     const project = await projectService.getProject(env, projectId);
@@ -319,7 +320,7 @@ export class OAuthService {
 
     // Generate the same persisted, rotating refresh token used by password login.
     const jwtAccessToken = await jwtService.generateAccessToken(project, user.id, user.email);
-    const refreshToken = await authService.issueRefreshToken(env, projectId, user.id);
+    const refreshToken = await authService.issueRefreshToken(env, projectId, user.id, deviceName);
 
     return { user, accessToken: jwtAccessToken, refreshToken, accountCreated };
   }

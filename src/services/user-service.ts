@@ -51,9 +51,10 @@ export class UserService {
   ): Promise<User | null> {
     const safeName = sanitizeTableName(tableName);
 
+    // The address is matched case-insensitively, so "A@x.com" and "a@x.com" are one account.
     const result = await env.DB.prepare(
-      `SELECT ${USER_COLUMNS} FROM ${safeName} WHERE email = ? AND status != 'deleted' LIMIT 1`
-    ).bind(email).first();
+      `SELECT ${USER_COLUMNS} FROM ${safeName} WHERE email = ? COLLATE NOCASE AND status != 'deleted' LIMIT 1`
+    ).bind(email.trim().toLowerCase()).first();
 
     return result as User | null;
   }
@@ -131,8 +132,8 @@ export class UserService {
 
     // Check if there's a deleted user with this email
     const deletedUser = await env.DB.prepare(
-      `SELECT 1 FROM ${safeName} WHERE email = ? AND status = 'deleted' LIMIT 1`
-    ).bind(data.email).first();
+      `SELECT 1 FROM ${safeName} WHERE email = ? COLLATE NOCASE AND status = 'deleted' LIMIT 1`
+    ).bind(data.email.trim().toLowerCase()).first();
 
     // If a deleted user exists, reactivate them instead of creating new
     if (deletedUser) {
@@ -162,7 +163,7 @@ export class UserService {
 
     const params: any[] = [
       id,
-      data.email,
+      data.email.trim().toLowerCase(),
       data.passwordHash || null,
       data.oauthProvider || null,
       data.oauthProviderUserId || null,
@@ -209,8 +210,8 @@ export class UserService {
     if (updates.email !== undefined) {
       // Check if email is already taken by another user
       const existing = await env.DB.prepare(
-        `SELECT id FROM ${safeName} WHERE email = ? AND id != ? AND status != 'deleted' LIMIT 1`
-      ).bind(updates.email, userId).first();
+        `SELECT id FROM ${safeName} WHERE email = ? COLLATE NOCASE AND id != ? AND status != 'deleted' LIMIT 1`
+      ).bind(updates.email.trim().toLowerCase(), userId).first();
 
       if (existing) {
         throw new ConflictError('Email is already taken by another user');

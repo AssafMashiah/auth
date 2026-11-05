@@ -1515,7 +1515,7 @@ app.get('/api/auth/:projectId/oauth/:provider/callback', async (c) => {
   const browserSession = cookieValue(c.req.raw, 'oauth_session');
   if (!code || !state || !browserSession) return c.json({ success: false, error: 'Authorization code, state, and browser session are required' }, 400);
   const codeVerifier = await oauthService.consumeAuthorization(c.env, projectId, provider, redirectUri, state, browserSession);
-  const result = await oauthService.handleCallback(c.env, projectId, provider, code, redirectUri, codeVerifier);
+  const result = await oauthService.handleCallback(c.env, projectId, provider, code, redirectUri, codeVerifier, c.req.query('device_name') || undefined);
   c.header('Set-Cookie', 'oauth_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
   return c.json({
     success: true,
