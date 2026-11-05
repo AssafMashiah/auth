@@ -462,7 +462,7 @@ export const apiEndpoints: APIEndpoint[] = [
           data: { user: { id: 'user-id', email: 'user@example.com', displayName: 'John Doe' } },
         },
       },
-      { status: 401, description: 'The current password is missing or not correct' },
+      { status: 401, description: 'The current password is missing or not correct', example: { success: false, error: 'Your current password is required to change it' } },
     ],
   },
   {
@@ -490,7 +490,7 @@ export const apiEndpoints: APIEndpoint[] = [
           message: 'A confirmation link is on its way to the new address',
         },
       },
-      { status: 409, description: 'That address is already used by another account' },
+      { status: 409, description: 'That address is already used by another account', example: { success: false, error: 'That address is already used by another account' } },
     ],
   },
   {
@@ -506,7 +506,7 @@ export const apiEndpoints: APIEndpoint[] = [
         description: 'The address has changed',
         example: { success: true, data: { email: 'new@example.com' }, message: 'Your address has changed' },
       },
-      { status: 401, description: 'The link is not valid, was already used or has expired' },
+      { status: 401, description: 'The link is not valid, was already used or has expired', example: { success: false, error: 'This link is not valid' } },
     ],
   },
   {
@@ -530,7 +530,7 @@ export const apiEndpoints: APIEndpoint[] = [
         description: 'The way in is removed',
         example: { success: true, message: 'google is no longer connected to this account' },
       },
-      { status: 400, description: 'That way in is not connected, or the account would have no way in' },
+      { status: 400, description: 'That way in is not connected, or the account would have no way in', example: { success: false, error: 'Set a password before you disconnect this, or you will not be able to sign in again' } },
     ],
   },
   {
@@ -549,7 +549,7 @@ export const apiEndpoints: APIEndpoint[] = [
         description: 'That device is signed out',
         example: { success: true, message: 'That device is signed out' },
       },
-      { status: 400, description: 'That device is not signed in to this account' },
+      { status: 400, description: 'That device is not signed in to this account', example: { success: false, error: 'That device is not signed in to this account' } },
     ],
   },
   {
@@ -586,7 +586,7 @@ export const apiEndpoints: APIEndpoint[] = [
         description: 'The message is on its way',
         example: { success: true, message: 'The confirmation message is on its way' },
       },
-      { status: 400, description: 'This address is already confirmed' },
+      { status: 400, description: 'This address is already confirmed', example: { success: false, error: 'This address is already confirmed' } },
     ],
   },
   {
@@ -610,7 +610,7 @@ export const apiEndpoints: APIEndpoint[] = [
         description: 'The account is deleted',
         example: { success: true, message: 'The account is deleted' },
       },
-      { status: 401, description: 'The password is missing or not correct' },
+      { status: 401, description: 'The password is missing or not correct', example: { success: false, error: 'Your password is required to delete the account' } },
     ],
   },
   {
